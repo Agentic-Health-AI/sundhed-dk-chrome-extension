@@ -51,6 +51,14 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     exportPriority: 50
   },
   {
+    id: "roentgen",
+    label: "Røntgen",
+    shortLabel: "Røntgen",
+    path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/billedbeskrivelser/",
+    matchers: ["billedbeskrivelser", "billedbeskrivelserborger"],
+    exportPriority: 80
+  },
+  {
     id: "henvisninger",
     label: "Henvisninger",
     shortLabel: "Henvisn.",
@@ -65,14 +73,6 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/min-laege/",
     matchers: ["organisation", "organization", "minlaegeorganization", "eserviceslink"],
     exportPriority: 70
-  },
-  {
-    id: "roentgen",
-    label: "Røntgen",
-    shortLabel: "Røntgen",
-    path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/billedbeskrivelser/",
-    matchers: ["billedbeskrivelser", "billedbeskrivelserborger"],
-    exportPriority: 80
   },
   {
     id: "diagnoser",

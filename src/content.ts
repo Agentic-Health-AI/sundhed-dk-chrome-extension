@@ -14,9 +14,9 @@ const CONTENT_SECTIONS: ContentSection[] = [
   { id: "journaler", label: "Journaler", matchers: ["ejournal", "ejournalportalborger", "ejournalportalsj"] },
   { id: "vaccinationer", label: "Vaccinationer", matchers: ["vaccination"] },
   { id: "aftaler", label: "Aftaler", matchers: ["aftaler", "aftalerborger"] },
+  { id: "roentgen", label: "Røntgen", matchers: ["billedbeskrivelser", "billedbeskrivelserborger"] },
   { id: "henvisninger", label: "Henvisninger", matchers: ["henvisning", "envisning", "dennationalehenvisningsformidling"] },
   { id: "egen-laege", label: "Egen læge", matchers: ["organisation", "organization", "minlaegeorganization", "eserviceslink"] },
-  { id: "roentgen", label: "Røntgen", matchers: ["billedbeskrivelser", "billedbeskrivelserborger"] },
   { id: "diagnoser", label: "Diagnoser", matchers: ["diagnoser", "diagnoserborger"] },
   { id: "hjemmemaalinger", label: "Hjemmemålinger", matchers: ["maalinger", "hjemmemaalingborger", "hjemmemaalingerborger"] },
   { id: "forloebsplaner", label: "Forløbsplaner", matchers: ["planer", "planerportalborger"] }

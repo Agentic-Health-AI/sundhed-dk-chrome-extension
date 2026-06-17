@@ -8,6 +8,8 @@ describe("api matchers", () => {
     expect(matchSection("https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt")).toBe("proevesvar");
     expect(matchSection("https://www.sundhed.dk/api/minlaegeorganization/")).toBe("egen-laege");
     expect(matchSection("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt")).toBe("journaler");
+    expect(matchSection("https://www.sundhed.dk/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/")).toBe("roentgen");
+    expect(matchSection("https://www.sundhed.dk/app/DenNationaleHenvisningsformidling/api/v1/henvisninger")).toBe("henvisninger");
   });
 
   it("does not match non-sundhed domains", () => {

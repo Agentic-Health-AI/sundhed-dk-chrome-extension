@@ -47,4 +47,42 @@ describe("section summaries", () => {
     expect(progress.status).toBe("raw-only");
     expect(progress.detail).toBe("1 journal-kald fundet som rå JSON");
   });
+
+  it("counts active and previous referrals from the referral endpoint", () => {
+    const progress = buildSectionProgress(section("henvisninger"), [
+      capturedResponse("henvisninger", "https://www.sundhed.dk/app/DenNationaleHenvisningsformidling/api/v1/henvisninger", {
+        aktiveHenvisninger: [],
+        tidligereHenvisninger: [{}]
+      })
+    ]);
+
+    expect(progress.status).toBe("data-found");
+    expect(progress.recordCount).toBe(1);
+    expect(progress.detail).toBe("1 henvisninger fundet");
+  });
+
+  it("counts x-ray description list responses by TotalItems", () => {
+    const progress = buildSectionProgress(section("roentgen"), [
+      capturedResponse("roentgen", "https://www.sundhed.dk/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/", {
+        TotalItems: 1,
+        Svar: [{}]
+      })
+    ]);
+
+    expect(progress.status).toBe("data-found");
+    expect(progress.recordCount).toBe(1);
+    expect(progress.detail).toBe("1 billedbeskrivelser fundet");
+  });
+
+  it("treats empty but valid data endpoint responses as completed with zero records", () => {
+    const progress = buildSectionProgress(section("forloebsplaner"), [
+      capturedResponse("forloebsplaner", "https://www.sundhed.dk/app/planerportalborger/api/v1/plans/", {
+        plans: []
+      })
+    ]);
+
+    expect(progress.status).toBe("data-found");
+    expect(progress.recordCount).toBe(0);
+    expect(progress.detail).toBe("0 forløbsplaner fundet");
+  });
 });

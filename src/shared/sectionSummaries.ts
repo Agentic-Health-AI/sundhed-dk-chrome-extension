@@ -54,8 +54,8 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
   },
   henvisninger: {
     recordLabel: "henvisninger",
-    dataEndpointMatchers: ["/henvisninger"],
-    countRecords: responses => asArray(findBody(responses, response => response.url.toLowerCase().includes("/henvisninger"))).length,
+    dataEndpointMatchers: ["/dennationalehenvisningsformidling/api/v1/henvisninger"],
+    countRecords: responses => countHenvisninger(findBody(responses, response => response.url.toLowerCase().includes("dennationalehenvisningsformidling"))),
     dataFoundDetail: count => `${count} henvisninger fundet`,
     missingDetail: "Åbn henvisninger, og vent til listen er indlæst."
   },
@@ -69,14 +69,14 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
   roentgen: {
     recordLabel: "billedbeskrivelser",
     dataEndpointMatchers: ["/billedbeskrivelser/henvisninger/"],
-    countRecords: responses => countArrayLikeBody(findBody(responses, response => response.url.includes("/billedbeskrivelser/henvisninger/"))),
+    countRecords: responses => countBilledbeskrivelser(findBody(responses, response => response.url.includes("/billedbeskrivelser/henvisninger/"))),
     dataFoundDetail: count => `${count} billedbeskrivelser fundet`,
     missingDetail: "Åbn røntgen/billedbeskrivelser, og vent til listen er indlæst.",
     actionHint: "Klik ind på relevante beskrivelser på sundhed.dk, hvis detaljer skal med."
   },
   diagnoser: {
     recordLabel: "diagnoser",
-    dataEndpointMatchers: ["/diagnoser"],
+    dataEndpointMatchers: ["/diagnoserborger/api/v1/diagnoser"],
     countRecords: responses => asArray(getRecord(findBody(responses, response => response.url.includes("/diagnoser"))).diagnoser).length,
     dataFoundDetail: count => `${count} diagnoser fundet`,
     missingDetail: "Åbn diagnoser, og vent til diagnoselisten er indlæst."
@@ -84,14 +84,14 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
   hjemmemaalinger: {
     recordLabel: "målinger",
     dataEndpointMatchers: ["/maalinger"],
-    countRecords: responses => countArrayLikeBody(findBody(responses, response => response.url.includes("/maalinger"))),
+    countRecords: responses => countDocumentsOrGroupings(findBody(responses, response => response.url.includes("/maalinger"))),
     dataFoundDetail: count => `${count} hjemmemålinger fundet`,
     missingDetail: "Åbn hjemmemålinger, og vent til målinger er indlæst."
   },
   forloebsplaner: {
     recordLabel: "forløbsplaner",
     dataEndpointMatchers: ["/plans/"],
-    countRecords: responses => countArrayLikeBody(findBody(responses, response => response.url.includes("/plans/"))),
+    countRecords: responses => asArray(getRecord(findBody(responses, response => response.url.includes("/plans/"))).plans).length,
     dataFoundDetail: count => `${count} forløbsplaner fundet`,
     missingDetail: "Åbn forløbsplaner, og vent til planerne er indlæst."
   }
@@ -135,7 +135,7 @@ function getStatus(
   if (rawOnly) {
     return "raw-only";
   }
-  if (recordCount > 0) {
+  if (recordCount > 0 || dataEndpointSeen) {
     return "data-found";
   }
   return "opened";
@@ -170,18 +170,26 @@ function countBestSvaroversigt(responses: CapturedResponse[]) {
   );
 }
 
-function countArrayLikeBody(body: unknown) {
-  if (Array.isArray(body)) {
-    return body.length;
-  }
-
+function countHenvisninger(body: unknown) {
   const record = getRecord(body);
-  for (const value of Object.values(record)) {
-    if (Array.isArray(value)) {
-      return value.length;
-    }
+  return asArray(record.aktiveHenvisninger).length + asArray(record.tidligereHenvisninger).length;
+}
+
+function countBilledbeskrivelser(body: unknown) {
+  const record = getRecord(body);
+  if (typeof record.TotalItems === "number") {
+    return record.TotalItems;
   }
-  return Object.keys(record).length > 0 ? 1 : 0;
+  return asArray(record.Svar).length;
+}
+
+function countDocumentsOrGroupings(body: unknown) {
+  const record = getRecord(body);
+  const documents = asArray(record.documents);
+  if (documents.length > 0) {
+    return documents.length;
+  }
+  return asArray(record.groupings).length;
 }
 
 function hasAnyMatcher(url: string, matchers: string[]) {
