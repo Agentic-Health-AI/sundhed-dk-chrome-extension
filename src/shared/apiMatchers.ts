@@ -4,27 +4,27 @@ import type { CapturedResponse, InjectedApiResponse, SectionId } from "./types";
 export function isSundhedUrl(url: string) {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === "www.sundhed.dk" || parsed.hostname === "sundhed.dk";
+    return parsed.hostname === "www.sundhed.dk";
+  } catch {
+    return false;
+  }
+}
+
+export function looksLikeSundhedApi(url: string) {
+  try {
+    const parsed = new URL(url);
+    return isSundhedUrl(url) && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
   } catch {
     return false;
   }
 }
 
 export function matchSection(url: string): SectionId | undefined {
-  if (!isSundhedUrl(url)) {
+  if (!looksLikeSundhedApi(url)) {
     return undefined;
   }
 
   const normalizedUrl = url.toLowerCase();
-  const looksLikeApi =
-    normalizedUrl.includes("/api/") ||
-    normalizedUrl.includes("/app/") ||
-    normalizedUrl.includes("labsvar");
-
-  if (!looksLikeApi) {
-    return undefined;
-  }
-
   const section = HEALTH_SECTIONS.find(candidate =>
     candidate.matchers.some(matcher => normalizedUrl.includes(matcher.toLowerCase()))
   );
@@ -33,7 +33,11 @@ export function matchSection(url: string): SectionId | undefined {
 }
 
 export function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | undefined {
-  const sectionId = matchSection(payload.url);
+  if (!looksLikeSundhedApi(payload.url)) {
+    return undefined;
+  }
+
+  const sectionId = matchSection(payload.url) ?? matchSectionFromBody(payload.body) ?? "ukendt";
   if (!sectionId) {
     return undefined;
   }
@@ -44,14 +48,26 @@ export function toCapturedResponse(payload: InjectedApiResponse): CapturedRespon
   return {
     id: stableHash(identity),
     sectionId,
-    sectionLabel: section?.label ?? "Ukendt",
+    sectionLabel: section?.label ?? "Ukendt API",
     url: payload.url,
-    method: payload.method,
+    method: payload.method.toUpperCase(),
     status: payload.status,
     source: payload.source,
     capturedAt: payload.capturedAt,
     body: payload.body
   };
+}
+
+function matchSectionFromBody(body: unknown): SectionId | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return undefined;
+  }
+
+  if ("Svaroversigt" in body) {
+    return "proevesvar";
+  }
+
+  return undefined;
 }
 
 function stableHash(input: string) {

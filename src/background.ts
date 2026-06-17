@@ -215,7 +215,7 @@ function isValidCapturedResponse(response: CapturedResponse) {
     return false;
   }
 
-  if (!HEALTH_SECTIONS.some(section => section.id === response.sectionId)) {
+  if (response.sectionId !== "ukendt" && !HEALTH_SECTIONS.some(section => section.id === response.sectionId)) {
     return false;
   }
 

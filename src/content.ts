@@ -1,18 +1,5 @@
-import type { CaptureStatus, CapturedResponse, InjectedApiResponse, SectionId } from "./shared/types";
-
-const SECTION_MATCHERS: Array<{ id: Exclude<SectionId, "ukendt">; label: string; matchers: string[] }> = [
-  { id: "medicin", label: "Medicin", matchers: ["medicinkort2borger"] },
-  { id: "proevesvar", label: "Prøvesvar", matchers: ["labsvar"] },
-  { id: "journaler", label: "Journaler", matchers: ["ejournal"] },
-  { id: "vaccinationer", label: "Vaccinationer", matchers: ["vaccination"] },
-  { id: "aftaler", label: "Aftaler", matchers: ["aftaler"] },
-  { id: "henvisninger", label: "Henvisninger", matchers: ["henvisning", "envisning"] },
-  { id: "egen-laege", label: "Egen læge", matchers: ["organisation"] },
-  { id: "roentgen", label: "Røntgen", matchers: ["billedbeskrivelser"] },
-  { id: "diagnoser", label: "Diagnoser", matchers: ["diagnoser"] },
-  { id: "hjemmemaalinger", label: "Hjemmemålinger", matchers: ["maalinger"] },
-  { id: "forloebsplaner", label: "Forløbsplaner", matchers: ["planer"] }
-];
+import { toCapturedResponse } from "./shared/apiMatchers";
+import type { CaptureStatus, InjectedApiResponse } from "./shared/types";
 
 let captureStatus: CaptureStatus = "idle";
 let overlay: HTMLButtonElement | undefined;
@@ -50,39 +37,6 @@ async function refreshCaptureStatus() {
     captureStatus = response.data.status;
   }
   renderOverlay();
-}
-
-function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | undefined {
-  const normalizedUrl = payload.url.toLowerCase();
-  const section = SECTION_MATCHERS.find(candidate =>
-    candidate.matchers.some(matcher => normalizedUrl.includes(matcher.toLowerCase()))
-  );
-
-  if (!section || !looksLikeSundhedApi(payload.url)) {
-    return undefined;
-  }
-
-  return {
-    id: `cap_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`,
-    sectionId: section.id,
-    sectionLabel: section.label,
-    url: payload.url,
-    method: payload.method.toUpperCase(),
-    status: payload.status,
-    source: payload.source,
-    capturedAt: payload.capturedAt,
-    body: payload.body
-  };
-}
-
-function looksLikeSundhedApi(url: string) {
-  try {
-    const parsed = new URL(url);
-    const isSundhed = parsed.hostname === "www.sundhed.dk";
-    return isSundhed && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
-  } catch {
-    return false;
-  }
 }
 
 function renderOverlay() {

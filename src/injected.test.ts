@@ -4,15 +4,21 @@ import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 
 describe("injected hook bundle", () => {
-  it("captures fetch and XHR JSON responses on www.sundhed.dk pages", async () => {
+  it("captures JSON API responses on www.sundhed.dk even with misleading content-types", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     const messages: unknown[] = [];
 
     await page.route("https://www.sundhed.dk/app/medicinkort2borger/api/v1/ordinations/", route => {
       void route.fulfill({
-        contentType: "application/json",
+        contentType: "text/plain",
         body: JSON.stringify([{ DrugMedication: "Ovison" }])
+      });
+    });
+    await page.route("https://www.sundhed.dk/api/labsvar/svaroversigt", route => {
+      void route.fulfill({
+        contentType: "text/html",
+        body: JSON.stringify({ Svaroversigt: { Laboratorieresultater: [] } })
       });
     });
     await page.route("https://www.sundhed.dk/app/vaccination/api/v1/overview", route => {
@@ -33,6 +39,7 @@ describe("injected hook bundle", () => {
 
     await page.evaluate(async () => {
       await fetch("https://www.sundhed.dk/app/medicinkort2borger/api/v1/ordinations/");
+      await fetch("https://www.sundhed.dk/api/labsvar/svaroversigt");
       const xhr = new XMLHttpRequest();
       xhr.open("GET", "https://www.sundhed.dk/app/vaccination/api/v1/overview");
       xhr.responseType = "json";
@@ -42,7 +49,7 @@ describe("injected hook bundle", () => {
       });
     });
 
-    await page.waitForFunction(() => (window as unknown as { capturedMessages: unknown[] }).capturedMessages.length >= 2);
+    await page.waitForFunction(() => (window as unknown as { capturedMessages: unknown[] }).capturedMessages.length >= 3);
     messages.push(...(await page.evaluate(() => (window as unknown as { capturedMessages: unknown[] }).capturedMessages)));
     await browser.close();
 
@@ -51,7 +58,12 @@ describe("injected hook bundle", () => {
         expect.objectContaining({
           source: "sundhedsarkiv:page-hook",
           type: "API_RESPONSE",
-          payload: expect.objectContaining({ source: "fetch", status: 200 })
+          payload: expect.objectContaining({ source: "fetch", status: 200, body: [{ DrugMedication: "Ovison" }] })
+        }),
+        expect.objectContaining({
+          source: "sundhedsarkiv:page-hook",
+          type: "API_RESPONSE",
+          payload: expect.objectContaining({ source: "fetch", body: { Svaroversigt: { Laboratorieresultater: [] } } })
         }),
         expect.objectContaining({
           source: "sundhedsarkiv:page-hook",

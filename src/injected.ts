@@ -81,12 +81,27 @@ function patchXhr() {
 
 function shouldCapture(url: string, contentType: string | null) {
   const absoluteUrl = absolutize(url);
-  const isSundhed =
-    absoluteUrl.startsWith("https://www.sundhed.dk/");
+  const isSundhed = absoluteUrl.startsWith("https://www.sundhed.dk/");
   const isApi = absoluteUrl.includes("/api/") || absoluteUrl.includes("/app/");
-  const isJson = contentType?.toLowerCase().includes("json");
+  const isBinary = looksLikeBinaryContent(contentType);
 
-  return isSundhed && isApi && Boolean(isJson);
+  return isSundhed && isApi && !isBinary;
+}
+
+function looksLikeBinaryContent(contentType: string | null) {
+  if (!contentType) {
+    return false;
+  }
+
+  const normalized = contentType.toLowerCase();
+  return (
+    normalized.includes("image/") ||
+    normalized.includes("font/") ||
+    normalized.includes("audio/") ||
+    normalized.includes("video/") ||
+    normalized.includes("application/pdf") ||
+    normalized.includes("application/octet-stream")
+  );
 }
 
 function emit(payload: SerializableResponse) {

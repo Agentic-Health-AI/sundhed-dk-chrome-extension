@@ -31,13 +31,13 @@ export async function buildArchiveBlob(state: CaptureState) {
     )
   );
 
-  for (const section of HEALTH_SECTIONS) {
-    const responses = responsesBySection.get(section.id);
+  for (const sectionId of responsesBySection.keys()) {
+    const responses = responsesBySection.get(sectionId);
     if (!responses || responses.length === 0) {
       continue;
     }
 
-    zip.file(`raw/${section.id}.json`, JSON.stringify(responses, null, 2));
+    zip.file(`raw/${sectionId}.json`, JSON.stringify(responses, null, 2));
   }
 
   const markdownParts = [

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseAftaler, parseMedicin, parseSection } from "./sectionParsers";
-import { aftaleResponses, medicinResponses } from "../test/fixtures";
+import { parseAftaler, parseMedicin, parseProevesvar, parseSection } from "./sectionParsers";
+import { aftaleResponses, medicinResponses, proevesvarResponses } from "../test/fixtures";
 
 describe("section parsers", () => {
   it("parses medication responses to markdown and CSV rows", () => {
@@ -28,6 +28,22 @@ describe("section parsers", () => {
         date: "17.06.2026",
         organisation: "Testhospitalet",
         appointmentType: "Fremmøde"
+      })
+    );
+  });
+
+  it("parses lab results from Svaroversigt responses", () => {
+    const result = parseProevesvar(proevesvarResponses);
+
+    expect(result.markdown).toContain("Antal prøvesvar: 1");
+    expect(result.markdown).toContain("Hæmoglobin;B");
+    expect(result.tables[0]?.filename).toBe("proevesvar.csv");
+    expect(result.tables[0]?.rows[0]).toEqual(
+      expect.objectContaining({
+        analysisName: "Hæmoglobin;B",
+        sampleDate: "2026-06-01",
+        result: "8,7 mmol/L",
+        requester: "Testklinik"
       })
     );
   });

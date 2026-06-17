@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildArchiveBlob } from "./exportArchive";
-import { aftaleResponses, medicinResponses } from "../test/fixtures";
+import { aftaleResponses, capturedResponse, medicinResponses } from "../test/fixtures";
 
 describe("buildArchiveBlob", () => {
   it("creates a ZIP with manifest, raw JSON, markdown and CSV", async () => {
@@ -24,5 +24,21 @@ describe("buildArchiveBlob", () => {
     expect(markdown).toContain("Sundhed.dk eksport");
     expect(medicinCsv).toContain("drugName");
     expect(medicinCsv).toContain("Ovison");
+  });
+
+  it("includes raw JSON for unknown sundhed.dk API responses", async () => {
+    const unknownResponse = capturedResponse("ukendt", "https://www.sundhed.dk/api/nytmodul/endpoint", { ok: true });
+    const blob = await buildArchiveBlob({
+      status: "idle",
+      responseCount: 1,
+      responses: [unknownResponse],
+      activity: [],
+      startedAt: "2026-06-17T11:00:00.000Z"
+    });
+
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+
+    expect(zip.file("raw/ukendt.json")).toBeTruthy();
+    expect(await zip.file("markdown/ukendt.md")?.async("string")).toContain("1 API-responses opsamlet");
   });
 });
