@@ -1,5 +1,26 @@
-import { toCapturedResponse } from "./shared/apiMatchers";
-import type { CaptureStatus, InjectedApiResponse } from "./shared/types";
+import type { CapturedResponse, CaptureStatus, InjectedApiResponse, SectionId } from "./shared/types";
+
+type ContentSection = {
+  id: Exclude<SectionId, "ukendt">;
+  label: string;
+  matchers: string[];
+};
+
+// Keep this file standalone. Chrome loads manifest content scripts as classic scripts,
+// so importing shared modules can make dist/content.js unusable.
+const CONTENT_SECTIONS: ContentSection[] = [
+  { id: "medicin", label: "Medicin", matchers: ["medicinkort2borger"] },
+  { id: "proevesvar", label: "Prøvesvar", matchers: ["labsvar", "proevesvarportal"] },
+  { id: "journaler", label: "Journaler", matchers: ["ejournal", "ejournalportalborger", "ejournalportalsj"] },
+  { id: "vaccinationer", label: "Vaccinationer", matchers: ["vaccination"] },
+  { id: "aftaler", label: "Aftaler", matchers: ["aftaler", "aftalerborger"] },
+  { id: "henvisninger", label: "Henvisninger", matchers: ["henvisning", "envisning", "dennationalehenvisningsformidling"] },
+  { id: "egen-laege", label: "Egen læge", matchers: ["organisation", "organization", "minlaegeorganization", "eserviceslink"] },
+  { id: "roentgen", label: "Røntgen", matchers: ["billedbeskrivelser", "billedbeskrivelserborger"] },
+  { id: "diagnoser", label: "Diagnoser", matchers: ["diagnoser", "diagnoserborger"] },
+  { id: "hjemmemaalinger", label: "Hjemmemålinger", matchers: ["maalinger", "hjemmemaalingborger", "hjemmemaalingerborger"] },
+  { id: "forloebsplaner", label: "Forløbsplaner", matchers: ["planer", "planerportalborger"] }
+];
 
 let captureStatus: CaptureStatus = "idle";
 let overlay: HTMLButtonElement | undefined;
@@ -37,6 +58,65 @@ async function refreshCaptureStatus() {
     captureStatus = response.data.status;
   }
   renderOverlay();
+}
+
+function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | undefined {
+  if (!looksLikeSundhedApi(payload.url)) {
+    return undefined;
+  }
+
+  const section = matchSection(payload.url) ?? matchSectionFromBody(payload.body);
+  const sectionId = section?.id ?? "ukendt";
+  const identity = `${sectionId}:${payload.method}:${payload.status}:${payload.url}:${payload.capturedAt}`;
+
+  return {
+    id: stableHash(identity),
+    sectionId,
+    sectionLabel: section?.label ?? "Ukendt API",
+    url: payload.url,
+    method: payload.method.toUpperCase(),
+    status: payload.status,
+    source: payload.source,
+    capturedAt: payload.capturedAt,
+    body: payload.body
+  };
+}
+
+function matchSection(url: string) {
+  const normalizedUrl = url.toLowerCase();
+  return CONTENT_SECTIONS.find(candidate =>
+    candidate.matchers.some(matcher => normalizedUrl.includes(matcher.toLowerCase()))
+  );
+}
+
+function matchSectionFromBody(body: unknown): ContentSection | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return undefined;
+  }
+
+  if ("Svaroversigt" in body) {
+    return CONTENT_SECTIONS.find(section => section.id === "proevesvar");
+  }
+
+  return undefined;
+}
+
+function looksLikeSundhedApi(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "www.sundhed.dk" && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
+  } catch {
+    return false;
+  }
+}
+
+function stableHash(input: string) {
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(index);
+    hash |= 0;
+  }
+  return `cap_${Math.abs(hash).toString(36)}_${Date.now().toString(36)}`;
 }
 
 function renderOverlay() {
