@@ -1,0 +1,89 @@
+<svg width="1440" height="480" viewBox="0 0 1440 480" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Sundhedsarkiv banner</title>
+  <desc id="desc">A calm green healthcare-tech illustration showing a browser side panel, shield, health data cards, and local archive download symbol.</desc>
+  <rect width="1440" height="480" rx="36" fill="#F7F9F6"/>
+  <path d="M0 0H1440V480H0V0Z" fill="url(#bg)"/>
+  <circle cx="174" cy="90" r="154" fill="#E8F4EF" opacity="0.7"/>
+  <circle cx="1256" cy="388" r="190" fill="#DDEFE8" opacity="0.8"/>
+  <path d="M100 380C224 312 316 316 430 360C568 414 675 394 786 330C940 242 1046 248 1340 318" stroke="#CFE6DD" stroke-width="22" stroke-linecap="round" opacity="0.55"/>
+  <g filter="url(#shadow)">
+    <rect x="295" y="78" width="850" height="328" rx="28" fill="white"/>
+    <rect x="295.5" y="78.5" width="849" height="327" rx="27.5" stroke="#2F6F5E" stroke-opacity="0.13"/>
+  </g>
+  <rect x="295" y="78" width="850" height="58" rx="28" fill="#F1F7F4"/>
+  <path d="M295 110C295 92.3269 309.327 78 327 78H1113C1130.67 78 1145 92.3269 1145 110V136H295V110Z" fill="#F1F7F4"/>
+  <circle cx="336" cy="108" r="8" fill="#D6E7DF"/>
+  <circle cx="365" cy="108" r="8" fill="#D6E7DF"/>
+  <circle cx="394" cy="108" r="8" fill="#D6E7DF"/>
+  <rect x="441" y="94" width="388" height="28" rx="14" fill="white" stroke="#D9E9E2"/>
+  <g filter="url(#softShadow)">
+    <rect x="330" y="164" width="268" height="198" rx="22" fill="#FBFDFC"/>
+    <rect x="330.5" y="164.5" width="267" height="197" rx="21.5" stroke="#2F6F5E" stroke-opacity="0.15"/>
+  </g>
+  <rect x="356" y="191" width="68" height="68" rx="19" fill="#E8F4EF"/>
+  <path d="M390 209L415 220V238C415 252 405 263 390 269C375 263 365 252 365 238V220L390 209Z" fill="#2F6F5E"/>
+  <path d="M377 239H386L391 228L398 250L404 239H412" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="446" y="194" width="105" height="14" rx="7" fill="#2F6F5E" opacity="0.92"/>
+  <rect x="446" y="222" width="122" height="10" rx="5" fill="#CBDDD5"/>
+  <rect x="356" y="288" width="196" height="12" rx="6" fill="#D5E7DF"/>
+  <rect x="356" y="316" width="148" height="12" rx="6" fill="#E1EDE8"/>
+  <g filter="url(#softShadow)">
+    <rect x="648" y="158" width="194" height="92" rx="20" fill="#FFFFFF"/>
+    <rect x="648.5" y="158.5" width="193" height="91" rx="19.5" stroke="#2F6F5E" stroke-opacity="0.14"/>
+    <rect x="688" y="282" width="214" height="92" rx="20" fill="#FFFFFF"/>
+    <rect x="688.5" y="282.5" width="213" height="91" rx="19.5" stroke="#2F6F5E" stroke-opacity="0.14"/>
+    <rect x="910" y="186" width="198" height="104" rx="20" fill="#FFFFFF"/>
+    <rect x="910.5" y="186.5" width="197" height="103" rx="19.5" stroke="#2F6F5E" stroke-opacity="0.14"/>
+  </g>
+  <rect x="674" y="184" width="42" height="42" rx="13" fill="#E8F4EF"/>
+  <path d="M686 206H704M695 197V215" stroke="#2F6F5E" stroke-width="5" stroke-linecap="round"/>
+  <rect x="730" y="185" width="76" height="10" rx="5" fill="#CFE3DA"/>
+  <rect x="730" y="209" width="54" height="10" rx="5" fill="#E1EDE8"/>
+  <rect x="714" y="308" width="42" height="42" rx="13" fill="#E8F4EF"/>
+  <path d="M725 328H731L735 318L742 340L747 328H755" stroke="#2F6F5E" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="770" y="309" width="92" height="10" rx="5" fill="#CFE3DA"/>
+  <rect x="770" y="333" width="62" height="10" rx="5" fill="#E1EDE8"/>
+  <rect x="936" y="214" width="46" height="46" rx="14" fill="#E8F4EF"/>
+  <path d="M950 238L959 247L976 228" stroke="#2F6F5E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="998" y="218" width="70" height="10" rx="5" fill="#CFE3DA"/>
+  <rect x="998" y="244" width="46" height="10" rx="5" fill="#E1EDE8"/>
+  <path d="M610 258C654 254 672 242 701 220" stroke="#8AC1B0" stroke-width="6" stroke-linecap="round" stroke-dasharray="4 16"/>
+  <path d="M858 252C884 258 902 262 933 248" stroke="#8AC1B0" stroke-width="6" stroke-linecap="round" stroke-dasharray="4 16"/>
+  <path d="M866 306C900 294 932 292 966 303" stroke="#8AC1B0" stroke-width="6" stroke-linecap="round" stroke-dasharray="4 16"/>
+  <g filter="url(#shadow)">
+    <rect x="1020" y="318" width="142" height="116" rx="26" fill="#173B33"/>
+    <path d="M1052 374H1130" stroke="#E8F4EF" stroke-width="8" stroke-linecap="round"/>
+    <path d="M1091 346V394M1091 394L1072 376M1091 394L1110 376" stroke="#E8F4EF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1059 398V410H1123V398" stroke="#8AC1B0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g filter="url(#softShadow)">
+    <circle cx="262" cy="338" r="44" fill="#FFFFFF"/>
+    <path d="M262 314L286 325V342C286 357 276 370 262 376C248 370 238 357 238 342V325L262 314Z" fill="#2F6F5E"/>
+  </g>
+  <path d="M1198 116C1223 116 1244 137 1244 162C1244 187 1223 208 1198 208C1173 208 1152 187 1152 162C1152 137 1173 116 1198 116Z" fill="#FFFFFF" stroke="#D9E9E2" stroke-width="2"/>
+  <path d="M1176 163H1189L1196 148L1207 177L1214 163H1222" stroke="#2F6F5E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="bg" x1="720" y1="0" x2="720" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F9F6"/>
+      <stop offset="1" stop-color="#EEF7F2"/>
+    </linearGradient>
+    <filter id="shadow" x="247" y="42" width="946" height="440" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="12"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0901961 0 0 0 0 0.231373 0 0 0 0 0.2 0 0 0 0.14 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <filter id="softShadow" x="306" y="142" width="826" height="256" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="8"/>
+      <feGaussianBlur stdDeviation="12"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0901961 0 0 0 0 0.231373 0 0 0 0 0.2 0 0 0 0.1 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_2"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_2" result="shape"/>
+    </filter>
+  </defs>
+</svg>
