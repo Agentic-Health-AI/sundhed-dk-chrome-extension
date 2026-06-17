@@ -56,9 +56,17 @@ button {
 }
 
 .brand-mark svg,
+.brand-mark img,
 .large-icon svg {
   width: 20px;
   height: 20px;
+}
+
+.brand-mark img {
+  width: 30px;
+  height: 30px;
+  display: block;
+  border-radius: 9px;
 }
 
 h1,

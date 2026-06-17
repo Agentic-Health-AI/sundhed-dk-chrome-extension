@@ -2,6 +2,8 @@
 
 Chrome-extension til lokal eksport af egne sundhed.dk-data.
 
+![Sundhedsarkiv logo](public/icons/icon128.png)
+
 Extensionen automatiserer ikke MitID. Brugeren logger selv ind på sundhed.dk, starter opsamling i sidepanelet og besøger de relevante sider. Extensionen opsamler JSON API-svar fra brugerens egen browser-session og kan downloade et samlet ZIP-arkiv med rå JSON, Markdown og CSV for understøttede sektioner.
 
 ## Udvikling

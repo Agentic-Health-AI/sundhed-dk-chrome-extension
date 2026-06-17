@@ -1,5 +1,4 @@
 import {
-  ArchiveIcon,
   CheckCircledIcon,
   Cross2Icon,
   DownloadIcon,
@@ -98,7 +97,7 @@ export function SidePanel() {
     <main className="panel-shell">
       <header className="panel-header">
         <div className="brand-mark" aria-hidden="true">
-          <ArchiveIcon />
+          <img src="icons/icon.svg" alt="" />
         </div>
         <div>
           <h1>Sundhedsarkiv</h1>
