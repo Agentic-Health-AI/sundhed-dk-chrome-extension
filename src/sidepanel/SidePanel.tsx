@@ -13,9 +13,10 @@ import {
   TrashIcon
 } from "@radix-ui/react-icons";
 import { useEffect, useMemo, useState } from "react";
+import { archiveFilename, buildArchiveBlob } from "../shared/exportArchive";
 import { HEALTH_SECTIONS } from "../shared/sections";
 import { sendRuntimeMessage } from "../shared/messages";
-import type { ActivityItem, CaptureState, SectionProgress } from "../shared/types";
+import type { ActivityItem, CapturedResponse, CaptureState, SectionProgress } from "../shared/types";
 
 type PanelState = CaptureState & {
   progress: SectionProgress[];
@@ -112,12 +113,12 @@ export function SidePanel() {
           <section className="status-band" data-state={isCapturing ? "active" : "idle"}>
             <div>
               <span className="eyebrow">Status</span>
-              <strong>{isCapturing ? "Opsamler data" : state.responses.length > 0 ? "Eksport klar" : "Klar"}</strong>
+              <strong>{isCapturing ? "Opsamler data" : getResponseCount(state) > 0 ? "Eksport klar" : "Klar"}</strong>
               <p>
                 {isCapturing
-                  ? "Besøg de sundhed.dk-sider, du vil have med."
-                  : state.responses.length > 0
-                    ? `${state.responses.length} responses ligger klar.`
+                  ? "Genindlæs siden efter start, hvis data allerede var åbnet."
+                  : getResponseCount(state) > 0
+                    ? `${getResponseCount(state)} responses ligger klar.`
                     : "Start opsamling og naviger selv på sundhed.dk."}
               </p>
             </div>
@@ -161,7 +162,7 @@ export function SidePanel() {
             </button>
           </section>
 
-          {!onSundhed && state.responses.length === 0 ? <NotOnSundhed /> : null}
+          {!onSundhed && getResponseCount(state) === 0 ? <NotOnSundhed /> : null}
 
           <section className="section-block">
             <div className="section-heading">
@@ -202,13 +203,13 @@ export function SidePanel() {
             <div>
               <span className="eyebrow">Eksport</span>
               <h2>Samlet arkiv</h2>
-              <p>ZIP med rå JSON, Markdown og CSV for understøttede sektioner.</p>
+              <p>ZIP med rå JSON, Markdown og CSV. Rå JSON kan indeholde flere detaljer end sidevisningen.</p>
             </div>
             <button
               className="button button-primary"
-              disabled={state.responses.length === 0 || busyAction === "download"}
+              disabled={getResponseCount(state) === 0 || busyAction === "download"}
               onClick={() => void runAction("download", async () => {
-                await sendRuntimeMessage({ type: "DOWNLOAD_ARCHIVE" });
+                await downloadArchive(state);
               })}
             >
               <DownloadIcon />
@@ -216,7 +217,7 @@ export function SidePanel() {
             </button>
             <button
               className="button button-ghost"
-              disabled={state.responses.length === 0 || busyAction === "clear"}
+              disabled={getResponseCount(state) === 0 || busyAction === "clear"}
               onClick={() => void runAction("clear", async () => {
                 await sendRuntimeMessage({ type: "CLEAR_CAPTURE" });
               })}
@@ -230,10 +231,36 @@ export function SidePanel() {
 
       <footer className="panel-footer">
         <LockClosedIcon />
-        <span>Data gemmes midlertidigt i Chrome og sendes ikke til en server.</span>
+        <span>Data gemmes midlertidigt i Chrome, ryddes efter inaktivitet og sendes ikke til en server.</span>
       </footer>
     </main>
   );
+}
+
+async function downloadArchive(state: PanelState) {
+  const response = await sendRuntimeMessage<CapturedResponse[]>({ type: "GET_CAPTURED_RESPONSES" });
+  if (!response.ok || !response.data) {
+    throw new Error(response.error ?? "Eksporten kunne ikke hentes.");
+  }
+  if (response.data.length === 0) {
+    throw new Error("Der er ingen opsamlede data at eksportere.");
+  }
+
+  const blob = await buildArchiveBlob({ ...state, responses: response.data, responseCount: response.data.length });
+  const url = URL.createObjectURL(blob);
+  try {
+    await chrome.downloads.download({
+      url,
+      filename: archiveFilename(),
+      saveAs: true
+    });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+}
+
+function getResponseCount(state: PanelState) {
+  return state.responseCount ?? state.responses.length;
 }
 
 function ConsentGate({ onAccept }: { onAccept: () => void }) {
@@ -245,7 +272,7 @@ function ConsentGate({ onAccept }: { onAccept: () => void }) {
       <h2>Du styrer eksporten</h2>
       <p>
         Extensionen kan læse JSON-svar fra sundhed.dk, mens du selv er logget ind og navigerer.
-        Den automatiserer ikke MitID og sender ikke data væk fra browseren.
+        Den automatiserer ikke MitID, sender ikke data væk fra browseren og rydder midlertidig opsamling efter inaktivitet.
       </p>
       <button className="button button-primary" onClick={onAccept}>
         <CheckCircledIcon />
@@ -261,7 +288,7 @@ function NotOnSundhed() {
       <FileTextIcon />
       <div>
         <strong>Åbn sundhed.dk for at begynde</strong>
-        <p>Log ind med MitID i fanen, start opsamling, og besøg de sider der skal med.</p>
+        <p>Log ind med MitID i fanen, start opsamling, og genindlæs siden hvis den allerede var åben.</p>
       </div>
     </section>
   );

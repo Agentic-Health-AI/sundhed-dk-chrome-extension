@@ -17,7 +17,7 @@ function patchFetch() {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await originalFetch(input, init);
     const url = getFetchUrl(input);
-    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     void captureFetchResponse(response, url, method);
     return response;
   };
@@ -48,7 +48,7 @@ function patchXhr() {
   const originalSend = XMLHttpRequest.prototype.send;
 
   XMLHttpRequest.prototype.open = function patchedOpen(method: string, url: string | URL) {
-    this.__sundhedsarkivMeta = { method, url: String(url) };
+    this.__sundhedsarkivMeta = { method: method.toUpperCase(), url: String(url) };
     return originalOpen.apply(this, arguments as unknown as Parameters<typeof originalOpen>);
   };
 
@@ -61,7 +61,7 @@ function patchXhr() {
       }
 
       try {
-        const body = typeof this.response === "string" ? JSON.parse(this.response) : JSON.parse(this.responseText);
+        const body = parseXhrBody(this);
         emit({
           url: absolutize(meta.url),
           method: meta.method,
@@ -82,7 +82,7 @@ function patchXhr() {
 function shouldCapture(url: string, contentType: string | null) {
   const absoluteUrl = absolutize(url);
   const isSundhed =
-    absoluteUrl.startsWith("https://www.sundhed.dk/") || absoluteUrl.startsWith("https://sundhed.dk/");
+    absoluteUrl.startsWith("https://www.sundhed.dk/");
   const isApi = absoluteUrl.includes("/api/") || absoluteUrl.includes("/app/");
   const isJson = contentType?.toLowerCase().includes("json");
 
@@ -102,6 +102,18 @@ function getFetchUrl(input: RequestInfo | URL) {
 
 function absolutize(url: string) {
   return new URL(url, window.location.href).href;
+}
+
+function parseXhrBody(xhr: XMLHttpRequest) {
+  if (xhr.responseType === "json" && xhr.response !== null) {
+    return xhr.response;
+  }
+
+  if (typeof xhr.response === "string" && xhr.response.length > 0) {
+    return JSON.parse(xhr.response);
+  }
+
+  return JSON.parse(xhr.responseText);
 }
 
 declare global {

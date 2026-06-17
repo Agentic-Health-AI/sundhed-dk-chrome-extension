@@ -67,7 +67,7 @@ function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | un
     sectionId: section.id,
     sectionLabel: section.label,
     url: payload.url,
-    method: payload.method,
+    method: payload.method.toUpperCase(),
     status: payload.status,
     source: payload.source,
     capturedAt: payload.capturedAt,
@@ -78,8 +78,7 @@ function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | un
 function looksLikeSundhedApi(url: string) {
   try {
     const parsed = new URL(url);
-    const isSundhed =
-      parsed.hostname === "www.sundhed.dk" || parsed.hostname === "sundhed.dk" || parsed.hostname.endsWith(".sundhed.dk");
+    const isSundhed = parsed.hostname === "www.sundhed.dk";
     return isSundhed && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
   } catch {
     return false;

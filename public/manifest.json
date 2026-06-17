@@ -15,16 +15,16 @@
     "default_path": "sidepanel.html"
   },
   "permissions": ["downloads", "sidePanel", "storage", "tabs", "unlimitedStorage"],
-  "host_permissions": ["https://www.sundhed.dk/*", "https://sundhed.dk/*", "https://*.sundhed.dk/*"],
+  "host_permissions": ["https://www.sundhed.dk/*"],
   "content_scripts": [
     {
-      "matches": ["https://www.sundhed.dk/*", "https://sundhed.dk/*", "https://*.sundhed.dk/*"],
+      "matches": ["https://www.sundhed.dk/*"],
       "js": ["content.js"],
       "run_at": "document_start",
       "all_frames": true
     },
     {
-      "matches": ["https://www.sundhed.dk/*", "https://sundhed.dk/*", "https://*.sundhed.dk/*"],
+      "matches": ["https://www.sundhed.dk/*"],
       "js": ["injected.js"],
       "run_at": "document_start",
       "world": "MAIN",

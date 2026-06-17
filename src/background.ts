@@ -1,12 +1,18 @@
-import { archiveFilename, buildArchiveDataUrl } from "./shared/exportArchive";
+import { addStoredResponse, clearStoredResponses, getStoredResponses } from "./shared/captureDb";
 import { HEALTH_SECTIONS } from "./shared/sections";
 import type { ActivityItem, CapturedResponse, CaptureState, RuntimeMessage, RuntimeResponse } from "./shared/types";
 
 const STATE_KEY = "captureState";
+const MAX_ACTIVITY_ITEMS = 24;
+const CAPTURE_EXPIRY_MS = 30 * 60 * 1000;
 
-const initialState: CaptureState = {
+type StoredCaptureState = Omit<CaptureState, "responses"> & {
+  responses?: never;
+};
+
+const initialState: StoredCaptureState = {
   status: "idle",
-  responses: [],
+  responseCount: 0,
   activity: []
 };
 
@@ -34,8 +40,8 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return clearCapture();
     case "CAPTURED_RESPONSE":
       return addCapturedResponse(message.payload, sender.tab?.id);
-    case "DOWNLOAD_ARCHIVE":
-      return downloadArchive();
+    case "GET_CAPTURED_RESPONSES":
+      return getStoredResponses();
     case "OPEN_SECTION":
       return openSection(message.url);
     default:
@@ -53,7 +59,7 @@ async function startCapture(tabId?: number) {
     detail: "Besøg de sundhed.dk-sider, du vil eksportere.",
     at: new Date().toISOString()
   };
-  const nextState: CaptureState = {
+  const nextState: StoredCaptureState = {
     ...state,
     status: "capturing",
     activeTabId: activeTab?.id,
@@ -74,10 +80,10 @@ async function stopCapture() {
     id: `act_${Date.now()}`,
     sectionId: "ukendt",
     label: "Opsamling stoppet",
-    detail: `${state.responses.length} responses ligger klar til eksport.`,
+    detail: `${state.responseCount ?? 0} responses ligger klar til eksport.`,
     at: new Date().toISOString()
   };
-  const nextState: CaptureState = {
+  const nextState: StoredCaptureState = {
     ...state,
     status: "idle",
     updatedAt: new Date().toISOString(),
@@ -90,6 +96,7 @@ async function stopCapture() {
 }
 
 async function clearCapture() {
+  await clearStoredResponses();
   await setState(initialState);
   return getStateWithProgress(initialState);
 }
@@ -100,14 +107,19 @@ async function addCapturedResponse(response: CapturedResponse, tabId?: number) {
     return getStateWithProgress(state);
   }
 
-  const duplicate = state.responses.some(existing => existing.url === response.url && sameBody(existing.body, response.body));
-  const responses = duplicate ? state.responses : [...state.responses, response];
+  if (!isValidCapturedResponse(response)) {
+    throw new Error("Ugyldig response payload.");
+  }
+
+  const wasInserted = await addStoredResponse(response);
+  const responses = await getStoredResponses();
   const nextState: CaptureState = {
     ...state,
     activeTabId: tabId ?? state.activeTabId,
     updatedAt: new Date().toISOString(),
+    responseCount: responses.length,
     responses,
-    activity: duplicate
+    activity: !wasInserted
       ? state.activity
       : [
           {
@@ -118,7 +130,7 @@ async function addCapturedResponse(response: CapturedResponse, tabId?: number) {
             at: response.capturedAt
           },
           ...state.activity
-        ].slice(0, 24)
+        ].slice(0, MAX_ACTIVITY_ITEMS)
   };
 
   await setState(nextState);
@@ -126,23 +138,11 @@ async function addCapturedResponse(response: CapturedResponse, tabId?: number) {
   return getStateWithProgress(nextState);
 }
 
-async function downloadArchive() {
-  const state = await getState();
-  if (state.responses.length === 0) {
-    throw new Error("Der er ingen opsamlede data at eksportere.");
+async function openSection(url: string) {
+  if (!url.startsWith("https://www.sundhed.dk/")) {
+    throw new Error("Kun sundhed.dk-sider kan åbnes fra panelet.");
   }
 
-  const url = await buildArchiveDataUrl(state);
-  const downloadId = await chrome.downloads.download({
-    url,
-    filename: archiveFilename(),
-    saveAs: true
-  });
-
-  return { downloadId };
-}
-
-async function openSection(url: string) {
   const tab = await getActiveTab();
   if (tab?.id) {
     await chrome.tabs.update(tab.id, { url });
@@ -166,21 +166,35 @@ async function notifyTab(tabId: number | undefined, status: CaptureState["status
   await chrome.tabs.sendMessage(tabId, { type: "CAPTURE_STATUS", status }).catch(() => undefined);
 }
 
-async function getState(): Promise<CaptureState> {
+async function getState(): Promise<StoredCaptureState> {
   const stored = await chrome.storage.session.get(STATE_KEY);
-  return (stored[STATE_KEY] as CaptureState | undefined) ?? initialState;
+  const state = (stored[STATE_KEY] as StoredCaptureState | undefined) ?? initialState;
+  if (isExpired(state)) {
+    await clearStoredResponses();
+    await chrome.storage.session.set({ [STATE_KEY]: initialState });
+    return initialState;
+  }
+
+  return state;
 }
 
-async function setState(state: CaptureState) {
-  await chrome.storage.session.set({ [STATE_KEY]: state });
+async function setState(state: StoredCaptureState | CaptureState) {
+  const { responses: _responses, ...storedState } = state;
+  await chrome.storage.session.set({ [STATE_KEY]: storedState });
 }
 
-async function getStateWithProgress(state?: CaptureState) {
-  const captureState = state ?? (await getState());
+async function getStateWithProgress(state?: StoredCaptureState | CaptureState) {
+  const storedState = state ?? (await getState());
+  const responses = "responses" in storedState && Array.isArray(storedState.responses) ? storedState.responses : await getStoredResponses();
+  const captureState: CaptureState = {
+    ...storedState,
+    responseCount: responses.length,
+    responses: []
+  };
   return {
     ...captureState,
     progress: HEALTH_SECTIONS.map(section => {
-      const sectionResponses = captureState.responses.filter(response => response.sectionId === section.id);
+      const sectionResponses = responses.filter(response => response.sectionId === section.id);
       return {
         sectionId: section.id,
         label: section.label,
@@ -192,14 +206,49 @@ async function getStateWithProgress(state?: CaptureState) {
   };
 }
 
-function sameBody(left: unknown, right: unknown) {
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Der opstod en ukendt fejl.";
+}
+
+function isValidCapturedResponse(response: CapturedResponse) {
+  if (!response || typeof response !== "object") {
+    return false;
+  }
+
+  if (!HEALTH_SECTIONS.some(section => section.id === response.sectionId)) {
+    return false;
+  }
+
+  if (typeof response.method !== "string" || !/^[A-Z]+$/.test(response.method)) {
+    return false;
+  }
+
+  if (typeof response.status !== "number" || response.status < 100 || response.status > 599) {
+    return false;
+  }
+
+  if (typeof response.capturedAt !== "string" || Number.isNaN(new Date(response.capturedAt).getTime())) {
+    return false;
+  }
+
+  if (!response.url.startsWith("https://www.sundhed.dk/")) {
+    return false;
+  }
+
+  let encodedSize = 0;
   try {
-    return JSON.stringify(left) === JSON.stringify(right);
+    encodedSize = new Blob([JSON.stringify(response.body)]).size;
   } catch {
     return false;
   }
+  return encodedSize < 5_000_000;
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Der opstod en ukendt fejl.";
+function isExpired(state: StoredCaptureState) {
+  const timestamp = state.updatedAt ?? state.startedAt;
+  if (!timestamp) {
+    return false;
+  }
+
+  return Date.now() - new Date(timestamp).getTime() > CAPTURE_EXPIRY_MS;
 }

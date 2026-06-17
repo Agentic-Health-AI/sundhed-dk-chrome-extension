@@ -50,6 +50,7 @@ export type CaptureState = {
   activeTabUrl?: string;
   startedAt?: string;
   updatedAt?: string;
+  responseCount?: number;
   responses: CapturedResponse[];
   activity: ActivityItem[];
 };
@@ -69,7 +70,7 @@ export type RuntimeMessage =
   | { type: "STOP_CAPTURE" }
   | { type: "CLEAR_CAPTURE" }
   | { type: "CAPTURED_RESPONSE"; payload: CapturedResponse }
-  | { type: "DOWNLOAD_ARCHIVE" }
+  | { type: "GET_CAPTURED_RESPONSES" }
   | { type: "OPEN_SECTION"; url: string };
 
 export type RuntimeResponse<T = unknown> = {

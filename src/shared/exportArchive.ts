@@ -4,7 +4,7 @@ import type { CapturedResponse, CaptureState, SectionId } from "./types";
 import { parseSection } from "../parsers/sectionParsers";
 import { toCsv } from "../parsers/helpers";
 
-export async function buildArchiveDataUrl(state: CaptureState) {
+export async function buildArchiveBlob(state: CaptureState) {
   const zip = new JSZip();
   const capturedAt = new Date().toISOString();
   const responsesBySection = groupBySection(state.responses);
@@ -63,8 +63,7 @@ export async function buildArchiveDataUrl(state: CaptureState) {
 
   zip.file("sundhed-dk-eksport.md", markdownParts.join("\n"));
 
-  const base64 = await zip.generateAsync({ type: "base64", compression: "DEFLATE" });
-  return `data:application/zip;base64,${base64}`;
+  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
 }
 
 export function archiveFilename() {
