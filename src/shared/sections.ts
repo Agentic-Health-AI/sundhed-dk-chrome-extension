@@ -23,7 +23,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Prøvesvar",
     shortLabel: "Prøvesvar",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/laboratoriesvar/",
-    matchers: ["labsvar"],
+    matchers: ["labsvar", "proevesvarportal"],
     exportPriority: 20
   },
   {
@@ -31,7 +31,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Journaler",
     shortLabel: "Journaler",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/journal-fra-sygehus/",
-    matchers: ["ejournal"],
+    matchers: ["ejournal", "ejournalportalborger", "ejournalportalsj"],
     exportPriority: 30
   },
   {
@@ -47,7 +47,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Aftaler",
     shortLabel: "Aftaler",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/aftaler/",
-    matchers: ["aftaler"],
+    matchers: ["aftaler", "aftalerborger"],
     exportPriority: 50
   },
   {
@@ -55,7 +55,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Henvisninger",
     shortLabel: "Henvisn.",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/henvisninger/",
-    matchers: ["henvisning", "envisning"],
+    matchers: ["henvisning", "envisning", "dennationalehenvisningsformidling"],
     exportPriority: 60
   },
   {
@@ -63,7 +63,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Egen læge",
     shortLabel: "Læge",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/min-laege/",
-    matchers: ["organisation"],
+    matchers: ["organisation", "organization", "minlaegeorganization", "eserviceslink"],
     exportPriority: 70
   },
   {
@@ -71,7 +71,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Røntgen",
     shortLabel: "Røntgen",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/billedbeskrivelser/",
-    matchers: ["billedbeskrivelser"],
+    matchers: ["billedbeskrivelser", "billedbeskrivelserborger"],
     exportPriority: 80
   },
   {
@@ -79,7 +79,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Diagnoser",
     shortLabel: "Diagnoser",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/diagnoser/",
-    matchers: ["diagnoser"],
+    matchers: ["diagnoser", "diagnoserborger"],
     exportPriority: 90
   },
   {
@@ -87,7 +87,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Hjemmemålinger",
     shortLabel: "Målinger",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/hjemmemaalinger/",
-    matchers: ["maalinger"],
+    matchers: ["maalinger", "hjemmemaalingborger", "hjemmemaalingerborger"],
     exportPriority: 100
   },
   {
@@ -95,7 +95,7 @@ export const HEALTH_SECTIONS: HealthSection[] = [
     label: "Forløbsplaner",
     shortLabel: "Planer",
     path: "https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/planer/",
-    matchers: ["planer"],
+    matchers: ["planer", "planerportalborger"],
     exportPriority: 110
   }
 ];
