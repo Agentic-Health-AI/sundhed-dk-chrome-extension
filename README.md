@@ -9,6 +9,7 @@ Extensionen automatiserer ikke MitID. Brugeren logger selv ind på sundhed.dk, s
 ```bash
 npm install
 npm run build
+npm test
 ```
 
 Indlæs derefter `dist/` som unpacked extension i Chrome:
@@ -48,3 +49,11 @@ Indlæs derefter `dist/` som unpacked extension i Chrome:
 - Forløbsplaner
 
 Første parser-MVP laver struktureret Markdown og CSV for medicin, aftaler, vaccinationer og diagnoser. Øvrige sektioner eksporteres med rå JSON og summarisk Markdown.
+
+## Tests
+
+Testene bruger lokale fixtures og en simuleret sundhed.dk-side. De automatiserer ikke MitID og kalder ikke live sundhed.dk.
+
+```bash
+npm test
+```

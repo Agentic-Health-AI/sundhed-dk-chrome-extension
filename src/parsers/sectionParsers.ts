@@ -17,7 +17,7 @@ export function parseSection(sectionId: SectionId, responses: CapturedResponse[]
   }
 }
 
-function parseMedicin(responses: CapturedResponse[]): SectionExport {
+export function parseMedicin(responses: CapturedResponse[]): SectionExport {
   const lines = ["# Medicin", ""];
   const warnings: string[] = [];
   const identity = getRecord(findResponse(responses, "/identity/selectedname")?.body);
@@ -91,7 +91,7 @@ function parseMedicin(responses: CapturedResponse[]): SectionExport {
   };
 }
 
-function parseAftaler(responses: CapturedResponse[]): SectionExport {
+export function parseAftaler(responses: CapturedResponse[]): SectionExport {
   const body = getRecord(findResponse(responses, "/aftaler/cpr")?.body);
   const appointments = asArray(body.appointments).map(getRecord);
   const lines = ["# Aftaler", "", `Antal aftaler: ${appointments.length}`, ""];
@@ -138,7 +138,7 @@ function parseAftaler(responses: CapturedResponse[]): SectionExport {
   };
 }
 
-function parseVaccinationer(responses: CapturedResponse[]): SectionExport {
+export function parseVaccinationer(responses: CapturedResponse[]): SectionExport {
   const overview = getRecord(findResponse(responses, "/vaccination/api/v1/overview")?.body);
   const vaccinations = asArray(
     responses.find(response => response.url.includes("/effectuatedvaccinations/") && !response.url.includes("onlyDeletedVaccines=true"))?.body
@@ -187,7 +187,7 @@ function parseVaccinationer(responses: CapturedResponse[]): SectionExport {
   };
 }
 
-function parseDiagnoser(responses: CapturedResponse[]): SectionExport {
+export function parseDiagnoser(responses: CapturedResponse[]): SectionExport {
   const body = getRecord(findResponse(responses, "/diagnoser")?.body);
   const diagnoses = asArray(body.diagnoser).map(getRecord);
   const lines = ["# Diagnoser", ""];
