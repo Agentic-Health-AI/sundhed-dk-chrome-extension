@@ -95,5 +95,57 @@ export const proevesvarResponses = [
         }
       ]
     }
+  }),
+  capturedResponse("proevesvar", "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2024-06-17&til=2026-06-17", {
+    Svaroversigt: {
+      Analysetyper: [
+        {
+          Id: "analysis-1",
+          Titel: "Hæmoglobin",
+          LangtNavn_html: "Hæmoglobin;B"
+        },
+        {
+          Id: "analysis-2",
+          Titel: "Leukocytter",
+          LangtNavn_html: "Leukocytter;B"
+        }
+      ],
+      Rekvisitioner: [
+        {
+          Id: "req-1",
+          Proevetagningstidspunkt: "2026-06-01T09:30:00",
+          Svartidspunkt: "2026-06-01T13:15:00",
+          Rekvirent_html: "Testklinik",
+          Afsender_html: "Testlaboratoriet",
+          Laboratorieomraade: "Klinisk biokemi"
+        }
+      ],
+      Laboratorieresultater: [
+        {
+          AnalysetypeId: "analysis-1",
+          RekvisitionsId: "req-1",
+          Vaerdi: "8,7",
+          Vaerditype: "Numerisk",
+          Resultat: "8,7 mmol/L",
+          Resultatdato: "2026-06-01T13:00:00",
+          ResultatStatus: "Endeligt",
+          Resultattype: "Tal",
+          ProevenummerRekvirent: "rek-1",
+          ProevenummerLaboratorie: "lab-1"
+        },
+        {
+          AnalysetypeId: "analysis-2",
+          RekvisitionsId: "req-1",
+          Vaerdi: "6,1",
+          Vaerditype: "Numerisk",
+          Resultat: "6,1 mia./L",
+          Resultatdato: "2026-06-01T13:00:00",
+          ResultatStatus: "Endeligt",
+          Resultattype: "Tal",
+          ProevenummerRekvirent: "rek-1",
+          ProevenummerLaboratorie: "lab-1"
+        }
+      ]
+    }
   })
 ];

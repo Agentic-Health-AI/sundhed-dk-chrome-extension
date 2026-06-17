@@ -19,6 +19,22 @@ describe("buildArchiveBlob", () => {
     const medicinCsv = await zip.file("csv/medicin.csv")?.async("string");
 
     expect(manifest.responseCount).toBe(4);
+    expect(manifest.progress).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "medicin",
+          apiResponseCount: 3,
+          recordCount: 1,
+          recordLabel: "medicinrækker"
+        }),
+        expect.objectContaining({
+          id: "aftaler",
+          apiResponseCount: 1,
+          recordCount: 1,
+          recordLabel: "aftaler"
+        })
+      ])
+    );
     expect(zip.file("raw/medicin.json")).toBeTruthy();
     expect(zip.file("raw/aftaler.json")).toBeTruthy();
     expect(markdown).toContain("Sundhed.dk eksport");

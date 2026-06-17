@@ -1,4 +1,5 @@
 import { addStoredResponse, clearStoredResponses, getStoredResponses } from "./shared/captureDb";
+import { buildSectionProgress } from "./shared/sectionSummaries";
 import { HEALTH_SECTIONS } from "./shared/sections";
 import type { ActivityItem, CapturedResponse, CaptureState, RuntimeMessage, RuntimeResponse } from "./shared/types";
 
@@ -143,13 +144,16 @@ async function openSection(url: string) {
     throw new Error("Kun sundhed.dk-sider kan åbnes fra panelet.");
   }
 
+  const state = await getState();
   const tab = await getActiveTab();
   if (tab?.id) {
     await chrome.tabs.update(tab.id, { url });
+    await setState({ ...state, activeTabId: tab.id, activeTabUrl: url, updatedAt: new Date().toISOString() });
     return { tabId: tab.id };
   }
 
   const created = await chrome.tabs.create({ url });
+  await setState({ ...state, activeTabId: created.id, activeTabUrl: url, updatedAt: new Date().toISOString() });
   return { tabId: created.id };
 }
 
@@ -193,16 +197,7 @@ async function getStateWithProgress(state?: StoredCaptureState | CaptureState) {
   };
   return {
     ...captureState,
-    progress: HEALTH_SECTIONS.map(section => {
-      const sectionResponses = responses.filter(response => response.sectionId === section.id);
-      return {
-        sectionId: section.id,
-        label: section.label,
-        path: section.path,
-        count: sectionResponses.length,
-        lastCapturedAt: sectionResponses.at(-1)?.capturedAt
-      };
-    })
+    progress: HEALTH_SECTIONS.map(section => buildSectionProgress(section, responses))
   };
 }
 

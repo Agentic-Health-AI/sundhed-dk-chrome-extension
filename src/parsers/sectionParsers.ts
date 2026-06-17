@@ -309,20 +309,15 @@ export function parseDiagnoser(responses: CapturedResponse[]): SectionExport {
 }
 
 function findSvaroversigt(responses: CapturedResponse[]) {
-  const response = findResponse(responses, "/labsvar/svaroversigt");
-  const body = getRecord(response?.body);
-  if (body.Svaroversigt) {
-    return getRecord(body.Svaroversigt);
-  }
+  const candidates = responses
+    .map(response => getRecord(getRecord(response.body).Svaroversigt))
+    .filter(candidate => Object.keys(candidate).length > 0);
 
-  for (const candidate of responses) {
-    const candidateBody = getRecord(candidate.body);
-    if (candidateBody.Svaroversigt) {
-      return getRecord(candidateBody.Svaroversigt);
-    }
-  }
+  return candidates.sort((left, right) => countLabResults(right) - countLabResults(left))[0] ?? {};
+}
 
-  return {};
+function countLabResults(svaroversigt: Record<string, unknown>) {
+  return asArray(svaroversigt.Laboratorieresultater).length;
 }
 
 function htmlToText(value: unknown) {

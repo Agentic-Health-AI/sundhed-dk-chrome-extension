@@ -29,9 +29,16 @@ const emptyState: PanelState = {
     sectionId: section.id,
     label: section.label,
     path: section.path,
-    count: 0
+    count: 0,
+    apiResponseCount: 0,
+    recordCount: 0,
+    recordLabel: "API-responses",
+    status: "not-started",
+    detail: "Ikke gennemgået endnu"
   }))
 };
+
+const LOGIN_URL = "https://www.sundhed.dk/borger/min-side/";
 
 export function SidePanel() {
   const [state, setState] = useState<PanelState>(emptyState);
@@ -59,9 +66,10 @@ export function SidePanel() {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
-  const foundSections = useMemo(() => state.progress.filter(section => section.count > 0), [state.progress]);
+  const foundSections = useMemo(() => state.progress.filter(section => isSectionUseful(section)), [state.progress]);
   const isCapturing = state.status === "capturing";
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
+  const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
 
   async function refreshState() {
     setLoading(true);
@@ -93,6 +101,17 @@ export function SidePanel() {
     setConsented(true);
   }
 
+  async function openLogin() {
+    await sendRuntimeMessage({ type: "OPEN_SECTION", url: LOGIN_URL });
+  }
+
+  async function openGuidedSection(section: SectionProgress) {
+    if (!isCapturing) {
+      await sendRuntimeMessage({ type: "START_CAPTURE" });
+    }
+    await sendRuntimeMessage({ type: "OPEN_SECTION", url: section.path });
+  }
+
   return (
     <main className="panel-shell">
       <header className="panel-header">
@@ -112,13 +131,13 @@ export function SidePanel() {
           <section className="status-band" data-state={isCapturing ? "active" : "idle"}>
             <div>
               <span className="eyebrow">Status</span>
-              <strong>{isCapturing ? "Opsamler data" : getResponseCount(state) > 0 ? "Eksport klar" : "Klar"}</strong>
+              <strong>{isCapturing ? "Opsamler data" : getResponseCount(state) > 0 ? "Data klar til eksport" : "Klar til login"}</strong>
               <p>
                 {isCapturing
-                  ? "Genindlæs siden efter start, hvis data allerede var åbnet."
+                  ? "Åbn en sektion nedenfor, og vent på at data-tallet opdateres."
                   : getResponseCount(state) > 0
-                    ? `${getResponseCount(state)} responses ligger klar.`
-                    : "Start opsamling og naviger selv på sundhed.dk."}
+                    ? `${foundSections.length} sektioner har brugbare data.`
+                    : "Start med at logge ind på sundhed.dk."}
               </p>
             </div>
             <div className="live-indicator" aria-hidden="true" />
@@ -130,6 +149,27 @@ export function SidePanel() {
               <span>{error}</span>
             </div>
           ) : null}
+
+          <section className="section-block">
+            <div className="section-heading">
+              <span className="eyebrow">Trin 1</span>
+              <span>{loginLikelyDone ? "Login registreret" : "Login"}</span>
+            </div>
+            <div className="login-step">
+              <div>
+                <strong>Log ind på sundhed.dk</strong>
+                <p>Vi sender dig til Min side. Du logger selv ind med MitID, og bagefter kan data-runden køres trin for trin.</p>
+              </div>
+              <button
+                className="button button-primary"
+                disabled={busyAction === "login"}
+                onClick={() => void runAction("login", openLogin)}
+              >
+                <ExternalLinkIcon />
+                Log ind
+              </button>
+            </div>
+          </section>
 
           <section className="primary-actions">
             {isCapturing ? (
@@ -165,30 +205,18 @@ export function SidePanel() {
 
           <section className="section-block">
             <div className="section-heading">
-              <span className="eyebrow">Data fundet</span>
+              <span className="eyebrow">Trin 2</span>
               <span>{foundSections.length} af {state.progress.length}</span>
             </div>
-            {loading ? <SkeletonList /> : <ProgressList progress={state.progress} />}
-          </section>
-
-          <section className="section-block">
-            <div className="section-heading">
-              <span className="eyebrow">Foreslåede sider</span>
-            </div>
-            <div className="quick-links">
-              {HEALTH_SECTIONS.slice(0, 6).map(section => (
-                <button
-                  key={section.id}
-                  className="link-row"
-                  onClick={() => void runAction(`open-${section.id}`, async () => {
-                    await sendRuntimeMessage({ type: "OPEN_SECTION", url: section.path });
-                  })}
-                >
-                  <span>{section.label}</span>
-                  <ExternalLinkIcon />
-                </button>
-              ))}
-            </div>
+            {loading ? (
+              <SkeletonList />
+            ) : (
+              <ProgressList
+                progress={state.progress}
+                busyAction={busyAction}
+                onOpen={section => void runAction(`open-${section.sectionId}`, async () => openGuidedSection(section))}
+              />
+            )}
           </section>
 
           <section className="section-block">
@@ -202,7 +230,7 @@ export function SidePanel() {
             <div>
               <span className="eyebrow">Eksport</span>
               <h2>Samlet arkiv</h2>
-              <p>ZIP med rå JSON, Markdown og CSV. Rå JSON kan indeholde flere detaljer end sidevisningen.</p>
+              <p>{exportReadinessText(state.progress)}</p>
             </div>
             <button
               className="button button-primary"
@@ -287,20 +315,37 @@ function NotOnSundhed() {
       <FileTextIcon />
       <div>
         <strong>Åbn sundhed.dk for at begynde</strong>
-        <p>Log ind med MitID i fanen, start opsamling, og genindlæs siden hvis den allerede var åben.</p>
+        <p>Brug login-knappen, log ind med MitID, og fortsæt derefter med data-runden.</p>
       </div>
     </section>
   );
 }
 
-function ProgressList({ progress }: { progress: SectionProgress[] }) {
+function ProgressList({
+  progress,
+  busyAction,
+  onOpen
+}: {
+  progress: SectionProgress[];
+  busyAction?: string;
+  onOpen: (section: SectionProgress) => void;
+}) {
   return (
     <div className="progress-list">
       {progress.map(section => (
-        <div className="progress-row" key={section.sectionId}>
-          <div className="progress-dot" data-found={section.count > 0} />
-          <span>{section.label}</span>
-          <strong>{section.count > 0 ? `${section.count} svar` : "Mangler"}</strong>
+        <div className="guided-row" key={section.sectionId} data-status={section.status}>
+          <div className="progress-dot" data-found={isSectionUseful(section)} />
+          <div className="guided-copy">
+            <div className="guided-title">
+              <span>{section.label}</span>
+              <strong>{statusLabel(section)}</strong>
+            </div>
+            <p>{section.detail}</p>
+            {section.actionHint ? <small>{section.actionHint}</small> : null}
+          </div>
+          <button className="icon-button" title={`Saml ${section.label}`} disabled={busyAction === `open-${section.sectionId}`} onClick={() => onOpen(section)}>
+            <ExternalLinkIcon />
+          </button>
         </div>
       ))}
     </div>
@@ -342,4 +387,36 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function isSectionUseful(section: SectionProgress) {
+  return section.status === "data-found" || section.status === "raw-only";
+}
+
+function statusLabel(section: SectionProgress) {
+  if (section.status === "data-found") {
+    return `${section.recordCount} ${section.recordLabel}`;
+  }
+  if (section.status === "raw-only") {
+    return "Rå JSON";
+  }
+  if (section.status === "needs-action") {
+    return "Kræver handling";
+  }
+  if (section.status === "opened") {
+    return "Åbnet";
+  }
+  return "Ikke startet";
+}
+
+function exportReadinessText(progress: SectionProgress[]) {
+  const structured = progress.filter(section => section.status === "data-found").length;
+  const rawOnly = progress.filter(section => section.status === "raw-only").length;
+  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened").length;
+
+  if (structured + rawOnly + needsAction === 0) {
+    return "ZIP med rå JSON, Markdown og CSV bliver klar, når du har gennemgået mindst én sektion.";
+  }
+
+  return `${structured} sektioner med struktureret data, ${rawOnly} med rå JSON og ${needsAction} der kræver mere handling.`;
 }

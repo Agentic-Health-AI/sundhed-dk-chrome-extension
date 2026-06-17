@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { buildSectionProgress } from "./sectionSummaries";
 import { HEALTH_SECTIONS } from "./sections";
 import type { CapturedResponse, CaptureState, SectionId } from "./types";
 import { parseSection } from "../parsers/sectionParsers";
@@ -11,6 +12,7 @@ export async function buildArchiveBlob(state: CaptureState) {
   const exports = Array.from(responsesBySection.entries()).map(([sectionId, responses]) =>
     parseSection(sectionId, responses)
   );
+  const progress = HEALTH_SECTIONS.map(section => buildSectionProgress(section, state.responses));
 
   zip.file(
     "manifest.json",
@@ -20,6 +22,16 @@ export async function buildArchiveBlob(state: CaptureState) {
         createdAt: capturedAt,
         startedAt: state.startedAt,
         responseCount: state.responses.length,
+        progress: progress.map(section => ({
+          id: section.sectionId,
+          label: section.label,
+          status: section.status,
+          apiResponseCount: section.apiResponseCount,
+          recordCount: section.recordCount,
+          recordLabel: section.recordLabel,
+          detail: section.detail,
+          actionHint: section.actionHint
+        })),
         sections: exports.map(sectionExport => ({
           id: sectionExport.id,
           title: sectionExport.title,

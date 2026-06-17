@@ -35,9 +35,10 @@ describe("section parsers", () => {
   it("parses lab results from Svaroversigt responses", () => {
     const result = parseProevesvar(proevesvarResponses);
 
-    expect(result.markdown).toContain("Antal prøvesvar: 1");
+    expect(result.markdown).toContain("Antal prøvesvar: 2");
     expect(result.markdown).toContain("Hæmoglobin;B");
     expect(result.tables[0]?.filename).toBe("proevesvar.csv");
+    expect(result.tables[0]?.rows).toHaveLength(2);
     expect(result.tables[0]?.rows[0]).toEqual(
       expect.objectContaining({
         analysisName: "Hæmoglobin;B",

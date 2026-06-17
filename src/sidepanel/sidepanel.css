@@ -101,6 +101,7 @@ h2 {
 .status-band,
 .consent-gate,
 .empty-state,
+.login-step,
 .export-panel {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(47, 111, 94, 0.14);
@@ -257,6 +258,7 @@ h2 {
 }
 
 .progress-row,
+.guided-row,
 .link-row,
 .activity-row {
   min-height: 42px;
@@ -293,6 +295,75 @@ h2 {
 
 .progress-dot[data-found="true"] {
   background: #2f6f5e;
+}
+
+.login-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.login-step strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.login-step p,
+.guided-row p,
+.guided-row small {
+  color: #65706b;
+  font-size: 12px;
+  line-height: 1.38;
+}
+
+.guided-row {
+  grid-template-columns: 10px 1fr 42px;
+  align-items: center;
+}
+
+.guided-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.guided-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.guided-title span {
+  min-width: 0;
+  color: #22312d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.guided-title strong {
+  flex: none;
+  color: #66736d;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.guided-row[data-status="data-found"] .guided-title strong,
+.guided-row[data-status="raw-only"] .guided-title strong {
+  color: #2f6f5e;
+}
+
+.guided-row[data-status="needs-action"] .guided-title strong {
+  color: #8a5a16;
+}
+
+.guided-row small {
+  display: block;
+  color: #4f625a;
 }
 
 .link-row {
