@@ -1,6 +1,9 @@
 const SOURCE = "sundhedsarkiv:page-hook";
 const CONTENT_SOURCE = "sundhedsarkiv:content-script";
 const EJOURNAL_API_BASE = "/app/ejournalportalborger/api/ejournal";
+const PROEVESVAR_API_BASE = "/app/proevesvarportal/api/v1";
+const ROENTGEN_HENVISNINGER_PATH = "/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/";
+const PROEVESVAR_LOOKBACK_YEARS = 2;
 
 type SerializableResponse = {
   url: string;
@@ -19,7 +22,7 @@ type JournalFilterBase = {
 
 let captureEnabled = false;
 let latestJournalFilterBase: JournalFilterBase | undefined;
-const scheduledJournalRequests = new Set<string>();
+const scheduledApiRequests = new Set<string>();
 
 patchFetch();
 patchXhr();
@@ -52,7 +55,7 @@ async function captureFetchResponse(response: Response, url: string, method: str
       body,
       capturedAt: new Date().toISOString()
     });
-    maybeExpandJournalResponse(url, body);
+    maybeExpandCapturedResponse(url, method, body);
   } catch {
     // Ignore non-JSON bodies even when the content-type is misleading.
   }
@@ -90,7 +93,7 @@ function patchXhr() {
           body,
           capturedAt: new Date().toISOString()
         });
-        maybeExpandJournalResponse(meta.url, body);
+        maybeExpandCapturedResponse(meta.url, meta.method, body);
       } catch {
         // Ignore XHR responses that cannot be represented as JSON.
       }
@@ -142,12 +145,22 @@ function listenForCaptureStatus() {
   });
 }
 
+function maybeExpandCapturedResponse(url: string, method: string, body: unknown) {
+  if (!captureEnabled) {
+    return;
+  }
+
+  markRequestSeen(method, url);
+  maybeExpandJournalResponse(url, body);
+  maybeExpandProevesvarResponse(url);
+  maybeExpandRoentgenResponse(url, body);
+}
+
 function maybeExpandJournalResponse(url: string, body: unknown) {
   if (!captureEnabled || !isJournalExpandableUrl(url)) {
     return;
   }
 
-  scheduledJournalRequests.add(`GET:${new URL(absolutize(url)).href}`);
   const overview = getRecord(body);
   if (isJournalOverviewUrl(url)) {
     scheduleAdditionalOverviewPages(url, overview);
@@ -177,7 +190,7 @@ function scheduleAdditionalOverviewPages(url: string, overview: Record<string, u
     } else {
       const pageUrl = new URL(parsed.href);
       pageUrl.searchParams.set("Side", String(page));
-      scheduleJournalFetch(pageUrl.href);
+      scheduleApiFetch(pageUrl.href, { "page-app-id": "717" });
     }
   }
 }
@@ -230,7 +243,7 @@ function scheduleJournalDetailFetch(endpoint: "kontaktperioder" | "epikriser" | 
       VaerdispringNoegle: readCaseInsensitive(key, "VaerdispringNoegle") ?? null
     })
   );
-  scheduleJournalFetch(url.href);
+  scheduleApiFetch(url.href, { "page-app-id": "717" });
 }
 
 function scheduleJournalPageFetch(endpoint: "epikriser" | "notater", key: Record<string, unknown>) {
@@ -243,7 +256,7 @@ function scheduleJournalPageFetch(endpoint: "epikriser" | "notater", key: Record
       VaerdispringNoegle: readCaseInsensitive(key, "VaerdispringNoegle") ?? null
     })
   );
-  scheduleJournalPost(url.href, buildJournalDataTablesBody());
+  scheduleApiPost(url.href, buildJournalDataTablesBody(), { "page-app-id": "717" });
 }
 
 function buildJournalDataTablesBody() {
@@ -270,13 +283,62 @@ function buildJournalDataTablesBody() {
   };
 }
 
-function scheduleJournalFetch(url: string) {
-  const absoluteUrl = new URL(url, window.location.origin).href;
-  const requestKey = `GET:${absoluteUrl}`;
-  if (scheduledJournalRequests.has(requestKey)) {
+function maybeExpandProevesvarResponse(url: string) {
+  if (!isProevesvarSvaroversigtUrl(url)) {
     return;
   }
-  scheduledJournalRequests.add(requestKey);
+
+  const parsed = new URL(absolutize(url));
+  const til = parsed.searchParams.get("til") ?? formatLocalDateTime(new Date(), true);
+  const currentFra = parsed.searchParams.get("fra");
+  const expandedFra = buildLookbackDate(til, PROEVESVAR_LOOKBACK_YEARS);
+  if (!expandedFra || (currentFra && isDateAtOrBefore(currentFra, expandedFra))) {
+    return;
+  }
+
+  parsed.searchParams.set("fra", expandedFra);
+  if (!parsed.searchParams.get("til")) {
+    parsed.searchParams.set("til", til);
+  }
+  scheduleApiFetch(parsed.href);
+}
+
+function maybeExpandRoentgenResponse(url: string, body: unknown) {
+  if (!isRoentgenHenvisningerUrl(url)) {
+    return;
+  }
+
+  const parsed = new URL(absolutize(url));
+  const response = getRecord(body);
+  const total = numberValue(readCaseInsensitive(response, "TotalItems")) || numberValue(readCaseInsensitive(response, "TotalCount"));
+  const responseItems =
+    asArray(readCaseInsensitive(response, "Svar")).length ||
+    asArray(readCaseInsensitive(response, "Henvisninger")).length ||
+    asArray(readCaseInsensitive(response, "Items")).length;
+  const itemsPerPage = numberValue(parsed.searchParams.get("ItemsPerPage")) || Math.max(responseItems, 10);
+  const currentPage = numberValue(parsed.searchParams.get("CurrentPage")) || 1;
+  if (total <= itemsPerPage || itemsPerPage <= 0) {
+    return;
+  }
+
+  const totalPages = Math.ceil(total / itemsPerPage);
+  for (let page = 1; page <= totalPages; page += 1) {
+    if (page === currentPage) {
+      continue;
+    }
+    const pageUrl = new URL(parsed.href);
+    pageUrl.searchParams.set("CurrentPage", String(page));
+    scheduleApiFetch(pageUrl.href);
+  }
+}
+
+function scheduleApiFetch(url: string, extraHeaders: Record<string, string> = {}) {
+  const absoluteUrl = new URL(url, window.location.origin).href;
+  const requestKey = `GET:${absoluteUrl}`;
+  if (scheduledApiRequests.has(requestKey)) {
+    return;
+  }
+  scheduledApiRequests.add(requestKey);
 
   window.setTimeout(() => {
     void window
@@ -284,7 +346,7 @@ function scheduleJournalFetch(url: string) {
         credentials: "same-origin",
         headers: {
           accept: "application/json, text/plain, */*",
-          "page-app-id": "717"
+          ...extraHeaders
         }
       })
       .catch(() => undefined);
@@ -292,13 +354,17 @@ function scheduleJournalFetch(url: string) {
 }
 
 function scheduleJournalPost(url: string, body: Record<string, unknown>) {
+  scheduleApiPost(url, body, { "page-app-id": "717" });
+}
+
+function scheduleApiPost(url: string, body: Record<string, unknown>, extraHeaders: Record<string, string> = {}) {
   const absoluteUrl = new URL(url, window.location.origin).href;
   const serializedBody = JSON.stringify(body);
   const requestKey = `POST:${absoluteUrl}:${serializedBody}`;
-  if (scheduledJournalRequests.has(requestKey)) {
+  if (scheduledApiRequests.has(requestKey)) {
     return;
   }
-  scheduledJournalRequests.add(requestKey);
+  scheduledApiRequests.add(requestKey);
 
   window.setTimeout(() => {
     void window
@@ -308,12 +374,16 @@ function scheduleJournalPost(url: string, body: Record<string, unknown>) {
         headers: {
           accept: "application/json, text/plain, */*",
           "content-type": "application/json;charset=UTF-8",
-          "page-app-id": "717"
+          ...extraHeaders
         },
         body: serializedBody
       })
       .catch(() => undefined);
   }, 0);
+}
+
+function markRequestSeen(method: string, url: string) {
+  scheduledApiRequests.add(`${method.toUpperCase()}:${new URL(absolutize(url)).href}`);
 }
 
 function getFetchUrl(input: RequestInfo | URL) {
@@ -340,6 +410,24 @@ function isJournalExpandableUrl(url: string) {
   try {
     const parsed = new URL(absolutize(url));
     return parsed.pathname === `${EJOURNAL_API_BASE}/forloebsoversigt` || parsed.pathname === `${EJOURNAL_API_BASE}/filter`;
+  } catch {
+    return false;
+  }
+}
+
+function isProevesvarSvaroversigtUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.pathname === `${PROEVESVAR_API_BASE}/svaroversigt`;
+  } catch {
+    return false;
+  }
+}
+
+function isRoentgenHenvisningerUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.pathname === ROENTGEN_HENVISNINGER_PATH;
   } catch {
     return false;
   }
@@ -400,6 +488,40 @@ function readCaseInsensitive(record: Record<string, unknown>, key: string) {
 function numberValue(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildLookbackDate(til: string, years: number) {
+  const endDate = new Date(til);
+  if (Number.isNaN(endDate.getTime())) {
+    return undefined;
+  }
+
+  const startDate = new Date(endDate);
+  startDate.setFullYear(startDate.getFullYear() - years);
+  startDate.setHours(0, 0, 0, 0);
+  return formatLocalDateTime(startDate, false);
+}
+
+function formatLocalDateTime(date: Date, endOfDay: boolean) {
+  const adjusted = new Date(date);
+  if (endOfDay) {
+    adjusted.setHours(23, 59, 59, 0);
+  }
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${adjusted.getFullYear()}-${pad(adjusted.getMonth() + 1)}-${pad(adjusted.getDate())}T${pad(adjusted.getHours())}:${pad(
+    adjusted.getMinutes()
+  )}:${pad(adjusted.getSeconds())}`;
+}
+
+function isDateAtOrBefore(value: string, reference: string) {
+  const valueDate = new Date(value);
+  const referenceDate = new Date(reference);
+  if (Number.isNaN(valueDate.getTime()) || Number.isNaN(referenceDate.getTime())) {
+    return false;
+  }
+
+  return valueDate.getTime() <= referenceDate.getTime();
 }
 
 function parseXhrBody(xhr: XMLHttpRequest) {

@@ -11,7 +11,7 @@ import {
   StopIcon,
   TrashIcon
 } from "@radix-ui/react-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { archiveFilename, buildArchiveBlob } from "../shared/exportArchive";
 import { HEALTH_SECTIONS } from "../shared/sections";
 import { sendRuntimeMessage } from "../shared/messages";
@@ -19,6 +19,13 @@ import type { ActivityItem, CapturedResponse, CaptureState, SectionProgress } fr
 
 type PanelState = CaptureState & {
   progress: SectionProgress[];
+};
+
+type AutoRunState = {
+  currentIndex: number;
+  total: number;
+  label: string;
+  stopping: boolean;
 };
 
 const emptyState: PanelState = {
@@ -46,6 +53,8 @@ export function SidePanel() {
   const [busyAction, setBusyAction] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [consented, setConsented] = useState(false);
+  const [autoRun, setAutoRun] = useState<AutoRunState | undefined>();
+  const autoRunAbortRef = useRef(false);
 
   useEffect(() => {
     void chrome.storage.local.get("consented").then(value => {
@@ -68,6 +77,7 @@ export function SidePanel() {
 
   const foundSections = useMemo(() => state.progress.filter(section => isSectionUseful(section)), [state.progress]);
   const isCapturing = state.status === "capturing";
+  const isAutoRunning = Boolean(autoRun);
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
   const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
 
@@ -110,6 +120,33 @@ export function SidePanel() {
       await sendRuntimeMessage({ type: "START_CAPTURE" });
     }
     await sendRuntimeMessage({ type: "OPEN_SECTION", url: section.path });
+  }
+
+  async function runAutomaticTour() {
+    autoRunAbortRef.current = false;
+    if (!isCapturing) {
+      await sendRuntimeMessage({ type: "START_CAPTURE" });
+    }
+
+    const sections = state.progress.length > 0 ? state.progress : emptyState.progress;
+    for (let index = 0; index < sections.length; index += 1) {
+      if (autoRunAbortRef.current) {
+        break;
+      }
+
+      const section = sections[index];
+      setAutoRun({ currentIndex: index + 1, total: sections.length, label: section.label, stopping: false });
+      await sendRuntimeMessage({ type: "OPEN_SECTION", url: section.path });
+      await wait(getAutoRunWaitMs(section.sectionId));
+      await refreshState();
+    }
+
+    setAutoRun(undefined);
+  }
+
+  function stopAutomaticTour() {
+    autoRunAbortRef.current = true;
+    setAutoRun(current => (current ? { ...current, stopping: true } : undefined));
   }
 
   return (
@@ -208,6 +245,31 @@ export function SidePanel() {
               <span className="eyebrow">Trin 2</span>
               <span>{foundSections.length} af {state.progress.length}</span>
             </div>
+            <div className="automation-panel" data-running={isAutoRunning ? "true" : "false"}>
+              <div>
+                <strong>{autoRun ? `${autoRun.label}` : "Kør data-runde"}</strong>
+                <p>
+                  {autoRun
+                    ? `${autoRun.currentIndex} af ${autoRun.total}. ${autoRun.stopping ? "Stopper efter den aktuelle side." : "Venter på at siden indlæser data."}`
+                    : "Åbner hver sektion i rækkefølge og opsamler data automatisk, når sundhed.dk svarer."}
+                </p>
+              </div>
+              {autoRun ? (
+                <button className="button button-secondary" onClick={stopAutomaticTour}>
+                  <StopIcon />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  className="button button-primary"
+                  disabled={Boolean(busyAction)}
+                  onClick={() => void runAction("auto-tour", runAutomaticTour)}
+                >
+                  <PlayIcon />
+                  Kør alle
+                </button>
+              )}
+            </div>
             {loading ? (
               <SkeletonList />
             ) : (
@@ -290,6 +352,20 @@ function getResponseCount(state: PanelState) {
   return state.responseCount ?? state.responses.length;
 }
 
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getAutoRunWaitMs(sectionId: SectionProgress["sectionId"]) {
+  if (sectionId === "journaler") {
+    return 8_000;
+  }
+  if (sectionId === "proevesvar" || sectionId === "roentgen") {
+    return 6_000;
+  }
+  return 4_000;
+}
+
 function ConsentGate({ onAccept }: { onAccept: () => void }) {
   return (
     <section className="consent-gate">
@@ -343,7 +419,7 @@ function ProgressList({
             <p>{section.detail}</p>
             {section.actionHint ? <small>{section.actionHint}</small> : null}
           </div>
-          <button className="icon-button" title={`Saml ${section.label}`} disabled={busyAction === `open-${section.sectionId}`} onClick={() => onOpen(section)}>
+          <button className="icon-button" title={`Saml ${section.label}`} disabled={Boolean(busyAction)} onClick={() => onOpen(section)}>
             <ExternalLinkIcon />
           </button>
         </div>

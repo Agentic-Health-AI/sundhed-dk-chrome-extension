@@ -102,6 +102,7 @@ h2 {
 .consent-gate,
 .empty-state,
 .login-step,
+.automation-panel,
 .export-panel {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(47, 111, 94, 0.14);
@@ -270,6 +271,7 @@ h2 {
 }
 
 .progress-row:last-child,
+.guided-row:last-child,
 .link-row:last-child,
 .activity-row:last-child {
   border-bottom: 0;
@@ -306,6 +308,22 @@ h2 {
   border-radius: 14px;
 }
 
+.automation-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.automation-panel[data-running="true"] {
+  border-color: rgba(47, 111, 94, 0.28);
+  box-shadow:
+    inset 3px 0 0 #2f6f5e,
+    0 18px 44px rgba(23, 59, 51, 0.08);
+}
+
 .login-step strong {
   display: block;
   margin-bottom: 4px;
@@ -313,6 +331,7 @@ h2 {
 }
 
 .login-step p,
+.automation-panel p,
 .guided-row p,
 .guided-row small {
   color: #65706b;

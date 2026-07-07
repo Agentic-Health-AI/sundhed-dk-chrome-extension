@@ -221,4 +221,120 @@ describe("injected hook bundle", () => {
     expect(urls.some(url => url.includes("/notater?"))).toBe(true);
     expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
   });
+
+  it("expands proevesvar overview requests to a two year lookback while capturing", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.route("https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt**", route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Svaroversigt: { Laboratorieresultater: [] } })
+      });
+    });
+
+    await page.goto("https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/laboratoriesvar/");
+    await page.evaluate(() => {
+      (window as unknown as { capturedMessages: unknown[] }).capturedMessages = [];
+      window.addEventListener("message", event => {
+        if (event.data?.source === "sundhedsarkiv:page-hook") {
+          (window as unknown as { capturedMessages: unknown[] }).capturedMessages.push(event.data);
+        }
+      });
+    });
+    await page.evaluate(readFileSync(resolve("dist/injected.js"), "utf8"));
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          source: "sundhedsarkiv:content-script",
+          type: "CAPTURE_STATUS",
+          status: "capturing"
+        },
+        window.location.origin
+      );
+    });
+
+    await page.evaluate(async () => {
+      await fetch(
+        "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2026-01-08T00:00:00&til=2026-07-08T23:59:59&source=RegionaleProevesvar&omraade=Alle"
+      );
+    });
+
+    await page.waitForFunction(() =>
+      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages.some(message => {
+        const url = message.payload?.url;
+        return url ? new URL(url).searchParams.get("fra") === "2024-07-08T00:00:00" : false;
+      })
+    );
+
+    const expandedFraValues = await page.evaluate(() =>
+      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages
+        .map(message => message.payload?.url)
+        .filter((url): url is string => Boolean(url))
+        .map(url => new URL(url).searchParams.get("fra"))
+    );
+    await browser.close();
+
+    expect(expandedFraValues).toContain("2024-07-08T00:00:00");
+  });
+
+  it("expands roentgen result pagination while capturing", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.route("https://www.sundhed.dk/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/**", route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          TotalItems: 25,
+          Svar: Array.from({ length: 10 }, (_, index) => ({ Id: index + 1 }))
+        })
+      });
+    });
+
+    await page.goto("https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/billedbeskrivelser/");
+    await page.evaluate(() => {
+      (window as unknown as { capturedMessages: unknown[] }).capturedMessages = [];
+      window.addEventListener("message", event => {
+        if (event.data?.source === "sundhedsarkiv:page-hook") {
+          (window as unknown as { capturedMessages: unknown[] }).capturedMessages.push(event.data);
+        }
+      });
+    });
+    await page.evaluate(readFileSync(resolve("dist/injected.js"), "utf8"));
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          source: "sundhedsarkiv:content-script",
+          type: "CAPTURE_STATUS",
+          status: "capturing"
+        },
+        window.location.origin
+      );
+    });
+
+    await page.evaluate(async () => {
+      await fetch(
+        "https://www.sundhed.dk/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/?Fra=2012-01-01&Til=2026-07-08&Direction=desc&SortColumn=1&ItemsPerPage=10&CurrentPage=1"
+      );
+    });
+
+    await page.waitForFunction(() => {
+      const pages = (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages
+        .map(message => message.payload?.url)
+        .filter((url): url is string => Boolean(url))
+        .map(url => new URL(url).searchParams.get("CurrentPage"));
+      return pages.includes("2") && pages.includes("3");
+    });
+
+    const capturedPages = await page.evaluate(() =>
+      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages
+        .map(message => message.payload?.url)
+        .filter((url): url is string => Boolean(url))
+        .map(url => new URL(url).searchParams.get("CurrentPage"))
+    );
+    await browser.close();
+
+    expect(capturedPages).toEqual(expect.arrayContaining(["1", "2", "3"]));
+  });
 });
