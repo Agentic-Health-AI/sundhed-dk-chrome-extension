@@ -4,6 +4,7 @@ const EJOURNAL_API_BASE = "/app/ejournalportalborger/api/ejournal";
 const PROEVESVAR_API_BASE = "/app/proevesvarportal/api/v1";
 const ROENTGEN_HENVISNINGER_PATH = "/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/";
 const PROEVESVAR_LOOKBACK_YEARS = 5;
+const PROEVESVAR_WINDOW_MONTHS = 6;
 
 type SerializableResponse = {
   url: string;
@@ -32,6 +33,7 @@ let latestJournalFilterBase: JournalFilterBase | undefined;
 let pendingExpandableResponses: PendingExpansion[] = [];
 let latestSameOriginApiHeaders: Record<string, string> = {};
 const scheduledApiRequests = new Set<string>();
+const autoScheduledApiRequests = new Set<string>();
 
 patchFetch();
 patchXhr();
@@ -360,6 +362,10 @@ function maybeExpandProevesvarResponse(url: string) {
     return;
   }
 
+  if (autoScheduledApiRequests.has(`GET:${new URL(absolutize(url)).href}`)) {
+    return;
+  }
+
   const parsed = new URL(absolutize(url));
   const til = parsed.searchParams.get("til") ?? formatLocalDateTime(new Date(), true);
   const currentFra = parsed.searchParams.get("fra");
@@ -368,11 +374,11 @@ function maybeExpandProevesvarResponse(url: string) {
     return;
   }
 
-  parsed.searchParams.set("fra", expandedFra);
-  if (!parsed.searchParams.get("til")) {
-    parsed.searchParams.set("til", til);
+  if (!hasRequiredProevesvarHeaders()) {
+    return;
   }
-  scheduleApiFetch(parsed.href);
+
+  buildProevesvarWindowUrls(parsed, expandedFra, til).forEach(windowUrl => scheduleApiFetch(windowUrl, {}, true));
 }
 
 function maybeExpandRoentgenResponse(url: string, body: unknown) {
@@ -404,13 +410,16 @@ function maybeExpandRoentgenResponse(url: string, body: unknown) {
   }
 }
 
-function scheduleApiFetch(url: string, extraHeaders: Record<string, string> = {}) {
+function scheduleApiFetch(url: string, extraHeaders: Record<string, string> = {}, autoExpanded = false) {
   const absoluteUrl = new URL(url, window.location.origin).href;
   const requestKey = `GET:${absoluteUrl}`;
   if (scheduledApiRequests.has(requestKey)) {
     return;
   }
   scheduledApiRequests.add(requestKey);
+  if (autoExpanded) {
+    autoScheduledApiRequests.add(requestKey);
+  }
 
   window.setTimeout(() => {
     void window
@@ -516,6 +525,14 @@ function normalizeReusableHeaders(headers: HeadersInit | Record<string, string>)
 
 function isReusableRequestHeader(name: string) {
   return name === "x-xsrf-token" || name === "conversation-uuid" || name === "page-app-id";
+}
+
+function hasRequiredProevesvarHeaders() {
+  return Boolean(
+    latestSameOriginApiHeaders["x-xsrf-token"] &&
+      latestSameOriginApiHeaders["conversation-uuid"] &&
+      latestSameOriginApiHeaders["page-app-id"]
+  );
 }
 
 function parseDataTablesRequestBody(body: unknown) {
@@ -668,6 +685,54 @@ function buildLookbackDate(til: string, years: number) {
   startDate.setFullYear(startDate.getFullYear() - years);
   startDate.setHours(0, 0, 0, 0);
   return formatLocalDateTime(startDate, false);
+}
+
+function buildProevesvarWindowUrls(baseUrl: URL, earliestFra: string, latestTil: string) {
+  const earliestDate = new Date(earliestFra);
+  const latestDate = new Date(latestTil);
+  if (Number.isNaN(earliestDate.getTime()) || Number.isNaN(latestDate.getTime())) {
+    return [];
+  }
+
+  const result: string[] = [];
+  const earliestStart = startOfDay(earliestDate);
+  let windowEnd = endOfDay(latestDate);
+
+  while (windowEnd.getTime() > earliestStart.getTime()) {
+    const windowStart = maxDate(startOfDay(subtractMonths(windowEnd, PROEVESVAR_WINDOW_MONTHS)), earliestStart);
+    const windowUrl = new URL(baseUrl.href);
+    windowUrl.searchParams.set("fra", formatLocalDateTime(windowStart, false));
+    windowUrl.searchParams.set("til", formatLocalDateTime(windowEnd, true));
+    result.push(windowUrl.href);
+
+    const nextEnd = new Date(windowStart);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+    windowEnd = endOfDay(nextEnd);
+  }
+
+  return result;
+}
+
+function subtractMonths(date: Date, months: number) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() - months);
+  return result;
+}
+
+function startOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 0);
+  return result;
+}
+
+function maxDate(left: Date, right: Date) {
+  return left.getTime() >= right.getTime() ? left : right;
 }
 
 function formatLocalDateTime(date: Date, endOfDay: boolean) {

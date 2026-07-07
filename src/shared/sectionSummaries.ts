@@ -163,10 +163,25 @@ function findBody(responses: CapturedResponse[], predicate: (response: CapturedR
 }
 
 function countBestSvaroversigt(responses: CapturedResponse[]) {
-  return Math.max(
-    0,
-    ...responses.map(response => asArray(getRecord(getRecord(response.body).Svaroversigt).Laboratorieresultater).length)
-  );
+  const keys = new Set<string>();
+  responses.forEach(response => {
+    asArray(getRecord(getRecord(response.body).Svaroversigt).Laboratorieresultater)
+      .map(getRecord)
+      .forEach(result => {
+        keys.add(
+          [
+            result.RekvisitionsId,
+            result.AnalysetypeId,
+            result.Resultatdato,
+            result.Resultat,
+            result.Vaerdi,
+            result.ProevenummerRekvirent,
+            result.ProevenummerLaboratorie
+          ].join("\u001f")
+        );
+      });
+  });
+  return keys.size;
 }
 
 function countJournalDocuments(responses: CapturedResponse[]) {

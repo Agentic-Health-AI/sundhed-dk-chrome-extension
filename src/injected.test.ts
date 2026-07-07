@@ -409,11 +409,16 @@ describe("injected hook bundle", () => {
     expect(notePageFirstTitles).toEqual(expect.arrayContaining(["Notat 1", "Notat 51", "Notat 101"]));
   });
 
-  it("expands proevesvar overview requests to a five year lookback while capturing", async () => {
+  it("expands proevesvar overview requests to half-year windows across a five year lookback while capturing", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    const proevesvarWindowHeaders: Array<Record<string, string>> = [];
 
     await page.route("https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt**", route => {
+      const fra = new URL(route.request().url()).searchParams.get("fra");
+      if (fra === "2021-07-08T00:00:00" || fra === "2021-12-30T00:00:00" || fra === "2025-07-07T00:00:00") {
+        proevesvarWindowHeaders.push(route.request().headers());
+      }
       void route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ Svaroversigt: { Laboratorieresultater: [] } })
@@ -443,26 +448,56 @@ describe("injected hook bundle", () => {
 
     await page.evaluate(async () => {
       await fetch(
-        "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2026-01-08T00:00:00&til=2026-07-08T23:59:59&source=RegionaleProevesvar&omraade=Alle"
+        "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2026-01-08T00:00:00&til=2026-07-08T23:59:59&source=RegionaleProevesvar&omraade=Alle",
+        {
+          headers: {
+            "conversation-uuid": "test-conversation",
+            "page-app-id": "test-page-app",
+            "x-xsrf-token": "test-xsrf-token"
+          }
+        }
       );
     });
 
     await page.waitForFunction(() =>
-      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages.some(message => {
-        const url = message.payload?.url;
-        return url ? new URL(url).searchParams.get("fra") === "2021-07-08T00:00:00" : false;
-      })
+      ["2021-07-08T00:00:00", "2021-12-30T00:00:00", "2025-07-07T00:00:00"].every(expectedFra =>
+        (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages.some(message => {
+          const url = message.payload?.url;
+          return url?.includes("/svaroversigt") ? new URL(url).searchParams.get("fra") === expectedFra : false;
+        })
+      )
     );
 
-    const expandedFraValues = await page.evaluate(() =>
+    const expandedWindows = await page.evaluate(() =>
       (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages
         .map(message => message.payload?.url)
-        .filter((url): url is string => Boolean(url))
-        .map(url => new URL(url).searchParams.get("fra"))
+        .filter((url): url is string => Boolean(url?.includes("/svaroversigt")))
+        .map(url => {
+          const parsed = new URL(url);
+          return {
+            fra: parsed.searchParams.get("fra"),
+            til: parsed.searchParams.get("til")
+          };
+        })
     );
     await browser.close();
 
-    expect(expandedFraValues).toContain("2021-07-08T00:00:00");
+    expect(expandedWindows).toEqual(
+      expect.arrayContaining([
+        { fra: "2021-07-08T00:00:00", til: "2021-12-29T23:59:59" },
+        { fra: "2021-12-30T00:00:00", til: "2022-06-30T23:59:59" },
+        { fra: "2025-07-07T00:00:00", til: "2026-01-07T23:59:59" }
+      ])
+    );
+    expect(proevesvarWindowHeaders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          "conversation-uuid": "test-conversation",
+          "page-app-id": "test-page-app",
+          "x-xsrf-token": "test-xsrf-token"
+        })
+      ])
+    );
   });
 
   it("expands roentgen result pagination while capturing", async () => {

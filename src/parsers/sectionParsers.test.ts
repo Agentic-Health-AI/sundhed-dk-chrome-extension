@@ -49,6 +49,52 @@ describe("section parsers", () => {
     );
   });
 
+  it("merges lab results from multiple Svaroversigt windows and deduplicates overlapping results", () => {
+    const result = parseProevesvar([
+      ...proevesvarResponses,
+      {
+        ...proevesvarResponses[1],
+        id: "older-proevesvar-window",
+        url: "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2023-01-01&til=2023-06-30",
+        body: {
+          Svaroversigt: {
+            Analysetyper: [{ Id: "analysis-3", Titel: "CRP", LangtNavn_html: "C-reaktivt protein;P" }],
+            Rekvisitioner: [
+              {
+                Id: "req-2",
+                Proevetagningstidspunkt: "2023-02-03T08:15:00",
+                Rekvirent_html: "Ældre klinik"
+              }
+            ],
+            Laboratorieresultater: [
+              {
+                AnalysetypeId: "analysis-3",
+                RekvisitionsId: "req-2",
+                Vaerdi: "4",
+                Resultat: "4 mg/L",
+                Resultatdato: "2023-02-03T11:00:00",
+                ProevenummerRekvirent: "rek-2",
+                ProevenummerLaboratorie: "lab-2"
+              }
+            ]
+          }
+        }
+      }
+    ]);
+
+    expect(result.markdown).toContain("Antal prøvesvar: 3");
+    expect(result.tables[0]?.rows).toHaveLength(3);
+    expect(result.tables[0]?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          analysisName: "C-reaktivt protein;P",
+          sampleDate: "2023-02-03",
+          result: "4 mg/L"
+        })
+      ])
+    );
+  });
+
   it("parses journal notes and discharge letters to markdown and CSV rows", () => {
     const result = parseJournaler([
       {

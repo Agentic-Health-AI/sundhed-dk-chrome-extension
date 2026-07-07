@@ -15,15 +15,30 @@ describe("section summaries", () => {
   it("separates API response count from lab result count", () => {
     const progress = buildSectionProgress(section("proevesvar"), [
       ...proevesvarResponses,
+      capturedResponse("proevesvar", "https://www.sundhed.dk/app/proevesvarportal/api/v1/svaroversigt?fra=2023-01-01&til=2023-06-30", {
+        Svaroversigt: {
+          Laboratorieresultater: [
+            {
+              AnalysetypeId: "analysis-3",
+              RekvisitionsId: "req-2",
+              Vaerdi: "4",
+              Resultat: "4 mg/L",
+              Resultatdato: "2023-02-03T11:00:00",
+              ProevenummerRekvirent: "rek-2",
+              ProevenummerLaboratorie: "lab-2"
+            }
+          ]
+        }
+      }),
       capturedResponse("proevesvar", "https://www.sundhed.dk/app/proevesvarportal/api/v1/filter", { Filters: [] }),
       capturedResponse("proevesvar", "https://www.sundhed.dk/app/proevesvarportal/api/v1/adminbeskeder", { Beskeder: [] })
     ]);
 
-    expect(progress.apiResponseCount).toBe(4);
-    expect(progress.recordCount).toBe(2);
+    expect(progress.apiResponseCount).toBe(5);
+    expect(progress.recordCount).toBe(3);
     expect(progress.recordLabel).toBe("laboratorieresultater");
     expect(progress.status).toBe("data-found");
-    expect(progress.detail).toBe("2 laboratorieresultater fundet");
+    expect(progress.detail).toBe("3 laboratorieresultater fundet");
   });
 
   it("does not treat vaccination spot/config responses as vaccination data", () => {

@@ -22,20 +22,24 @@ export function parseSection(sectionId: SectionId, responses: CapturedResponse[]
 }
 
 export function parseProevesvar(responses: CapturedResponse[]): SectionExport {
-  const svaroversigt = findSvaroversigt(responses);
+  const svaroversigter = findSvaroversigter(responses);
   const analysetyper = new Map(
-    asArray(svaroversigt.Analysetyper).map(rawType => {
-      const analysisType = getRecord(rawType);
-      return [String(analysisType.Id ?? ""), analysisType] as const;
-    })
+    svaroversigter.flatMap(svaroversigt =>
+      asArray(svaroversigt.Analysetyper).map(rawType => {
+        const analysisType = getRecord(rawType);
+        return [String(analysisType.Id ?? ""), analysisType] as const;
+      })
+    )
   );
   const rekvisitioner = new Map(
-    asArray(svaroversigt.Rekvisitioner).map(rawRequisition => {
-      const requisition = getRecord(rawRequisition);
-      return [String(requisition.Id ?? ""), requisition] as const;
-    })
+    svaroversigter.flatMap(svaroversigt =>
+      asArray(svaroversigt.Rekvisitioner).map(rawRequisition => {
+        const requisition = getRecord(rawRequisition);
+        return [String(requisition.Id ?? ""), requisition] as const;
+      })
+    )
   );
-  const labResults = asArray(svaroversigt.Laboratorieresultater).map(getRecord);
+  const labResults = uniqueLabResults(svaroversigter.flatMap(svaroversigt => asArray(svaroversigt.Laboratorieresultater).map(getRecord)));
   const rows = labResults.map(result => {
     const analysisType = analysetyper.get(String(result.AnalysetypeId ?? "")) ?? {};
     const requisition = rekvisitioner.get(String(result.RekvisitionsId ?? "")) ?? {};
@@ -414,16 +418,30 @@ export function parseJournaler(responses: CapturedResponse[]): SectionExport {
   };
 }
 
-function findSvaroversigt(responses: CapturedResponse[]) {
-  const candidates = responses
+function findSvaroversigter(responses: CapturedResponse[]) {
+  return responses
     .map(response => getRecord(getRecord(response.body).Svaroversigt))
     .filter(candidate => Object.keys(candidate).length > 0);
-
-  return candidates.sort((left, right) => countLabResults(right) - countLabResults(left))[0] ?? {};
 }
 
-function countLabResults(svaroversigt: Record<string, unknown>) {
-  return asArray(svaroversigt.Laboratorieresultater).length;
+function uniqueLabResults(results: Record<string, unknown>[]) {
+  const seen = new Set<string>();
+  return results.filter(result => {
+    const key = [
+      result.RekvisitionsId,
+      result.AnalysetypeId,
+      result.Resultatdato,
+      result.Resultat,
+      result.Vaerdi,
+      result.ProevenummerRekvirent,
+      result.ProevenummerLaboratorie
+    ].join("\u001f");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function htmlToText(value: unknown) {
