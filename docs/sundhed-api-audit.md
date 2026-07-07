@@ -51,10 +51,13 @@ Extensionen samler API-svar op via `src/injected.ts`, som hooker `fetch` og `XML
 | Journaler | `POST /app/ejournalportalborger/api/ejournal/filtervalg` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/datofiltrering` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/forloebsoversigt` with query keys `ItemsPerPage`, `Side`, `SortDesc`, `Sortering` | `journaler` |
+| Journaler | `POST /app/ejournalportalborger/api/ejournal/filter` with body keys `DatoFra`, `DatoTil`, `Diagnoser`, `Filtre`, `ItemsPerPage`, `Sektorer`, `Side`, `SortDesc`, `Sortering` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/vaerdispringcheck` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/kontaktperioder` with query key `noegle` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/epikriser` with query key `noegle` | `journaler` |
+| Journaler | `POST /app/ejournalportalborger/api/ejournal/epikriser-page` with query key `noegle` and DataTables body | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/notater` with query key `noegle` | `journaler` |
+| Journaler | `POST /app/ejournalportalborger/api/ejournal/notater-page` with query key `noegle` and DataTables body | `journaler` |
 | Hjemmemålinger | `POST /app/hjemmemaalingerborger/api/v1/maalinger` | `hjemmemaalinger` |
 | Forløbsplaner | `GET /app/planerportalborger/api/v1/plans/` | `forloebsplaner` |
 

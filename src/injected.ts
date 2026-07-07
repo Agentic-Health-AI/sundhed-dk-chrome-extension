@@ -11,8 +11,15 @@ type SerializableResponse = {
   capturedAt: string;
 };
 
+type JournalFilterBase = {
+  DatoFra: string;
+  DatoTil: string;
+  Sektorer: unknown[];
+};
+
 let captureEnabled = false;
-const scheduledJournalUrls = new Set<string>();
+let latestJournalFilterBase: JournalFilterBase | undefined;
+const scheduledJournalRequests = new Set<string>();
 
 patchFetch();
 patchXhr();
@@ -21,9 +28,10 @@ listenForCaptureStatus();
 function patchFetch() {
   const originalFetch = window.fetch;
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await originalFetch(input, init);
     const url = getFetchUrl(input);
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    rememberJournalRequestBody(url, init?.body);
+    const response = await originalFetch(input, init);
     void captureFetchResponse(response, url, method);
     return response;
   };
@@ -59,7 +67,12 @@ function patchXhr() {
     return originalOpen.apply(this, arguments as unknown as Parameters<typeof originalOpen>);
   };
 
-  XMLHttpRequest.prototype.send = function patchedSend() {
+  XMLHttpRequest.prototype.send = function patchedSend(body?: Document | XMLHttpRequestBodyInit | null) {
+    const meta = this.__sundhedsarkivMeta;
+    if (meta) {
+      rememberJournalRequestBody(meta.url, body);
+    }
+
     this.addEventListener("loadend", () => {
       const meta = this.__sundhedsarkivMeta;
       const contentType = this.getResponseHeader("content-type");
@@ -130,13 +143,15 @@ function listenForCaptureStatus() {
 }
 
 function maybeExpandJournalResponse(url: string, body: unknown) {
-  if (!captureEnabled || !isJournalOverviewUrl(url)) {
+  if (!captureEnabled || !isJournalExpandableUrl(url)) {
     return;
   }
 
-  scheduledJournalUrls.add(new URL(absolutize(url)).href);
+  scheduledJournalRequests.add(`GET:${new URL(absolutize(url)).href}`);
   const overview = getRecord(body);
-  scheduleAdditionalOverviewPages(url, overview);
+  if (isJournalOverviewUrl(url)) {
+    scheduleAdditionalOverviewPages(url, overview);
+  }
   scheduleJournalDetailCalls(overview);
 }
 
@@ -157,10 +172,28 @@ function scheduleAdditionalOverviewPages(url: string, overview: Record<string, u
       continue;
     }
 
-    const pageUrl = new URL(parsed.href);
-    pageUrl.searchParams.set("Side", String(page));
-    scheduleJournalFetch(pageUrl.href);
+    if (latestJournalFilterBase) {
+      scheduleJournalPost(`${EJOURNAL_API_BASE}/filter`, buildJournalFilterBody(page, itemsPerPage, parsed));
+    } else {
+      const pageUrl = new URL(parsed.href);
+      pageUrl.searchParams.set("Side", String(page));
+      scheduleJournalFetch(pageUrl.href);
+    }
   }
+}
+
+function buildJournalFilterBody(page: number, itemsPerPage: number, parsedOverviewUrl: URL) {
+  return {
+    Sektorer: latestJournalFilterBase?.Sektorer ?? [],
+    Filtre: [],
+    Diagnoser: [],
+    DatoFra: latestJournalFilterBase?.DatoFra ?? "",
+    DatoTil: latestJournalFilterBase?.DatoTil ?? "",
+    Side: page,
+    Sortering: parsedOverviewUrl.searchParams.get("Sortering") ?? "updated",
+    SortDesc: parsedOverviewUrl.searchParams.get("SortDesc") !== "false",
+    ItemsPerPage: itemsPerPage
+  };
 }
 
 function scheduleJournalDetailCalls(overview: Record<string, unknown>) {
@@ -199,19 +232,46 @@ function scheduleJournalDetailFetch(endpoint: "kontaktperioder" | "epikriser" | 
 }
 
 function scheduleJournalFetch(url: string) {
-  if (scheduledJournalUrls.has(url)) {
+  const absoluteUrl = new URL(url, window.location.origin).href;
+  const requestKey = `GET:${absoluteUrl}`;
+  if (scheduledJournalRequests.has(requestKey)) {
     return;
   }
-  scheduledJournalUrls.add(url);
+  scheduledJournalRequests.add(requestKey);
 
   window.setTimeout(() => {
     void window
-      .fetch(url, {
+      .fetch(absoluteUrl, {
         credentials: "same-origin",
         headers: {
           accept: "application/json, text/plain, */*",
           "page-app-id": "717"
         }
+      })
+      .catch(() => undefined);
+  }, 0);
+}
+
+function scheduleJournalPost(url: string, body: Record<string, unknown>) {
+  const absoluteUrl = new URL(url, window.location.origin).href;
+  const serializedBody = JSON.stringify(body);
+  const requestKey = `POST:${absoluteUrl}:${serializedBody}`;
+  if (scheduledJournalRequests.has(requestKey)) {
+    return;
+  }
+  scheduledJournalRequests.add(requestKey);
+
+  window.setTimeout(() => {
+    void window
+      .fetch(absoluteUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json, text/plain, */*",
+          "content-type": "application/json;charset=UTF-8",
+          "page-app-id": "717"
+        },
+        body: serializedBody
       })
       .catch(() => undefined);
   }, 0);
@@ -235,6 +295,45 @@ function isJournalOverviewUrl(url: string) {
   } catch {
     return false;
   }
+}
+
+function isJournalExpandableUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.pathname === `${EJOURNAL_API_BASE}/forloebsoversigt` || parsed.pathname === `${EJOURNAL_API_BASE}/filter`;
+  } catch {
+    return false;
+  }
+}
+
+function rememberJournalRequestBody(url: string, body: unknown) {
+  try {
+    const parsed = new URL(absolutize(url));
+    if (parsed.pathname !== `${EJOURNAL_API_BASE}/filtervalg`) {
+      return;
+    }
+
+    const requestBody = parseJsonBody(body);
+    if (!requestBody) {
+      return;
+    }
+
+    const datoFra = requestBody.DatoFra;
+    const datoTil = requestBody.DatoTil;
+    const sektorer = requestBody.Sektorer;
+    if (typeof datoFra === "string" && typeof datoTil === "string" && Array.isArray(sektorer)) {
+      latestJournalFilterBase = { DatoFra: datoFra, DatoTil: datoTil, Sektorer: sektorer };
+    }
+  } catch {
+    // Ignore request bodies that are not journal filter JSON.
+  }
+}
+
+function parseJsonBody(body: unknown) {
+  if (typeof body === "string") {
+    return getRecord(JSON.parse(body));
+  }
+  return {};
 }
 
 function getRecord(value: unknown): Record<string, unknown> {

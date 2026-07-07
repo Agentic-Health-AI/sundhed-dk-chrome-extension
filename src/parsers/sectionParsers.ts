@@ -442,7 +442,8 @@ function htmlToText(value: unknown) {
 
 function journalDocumentsFromResponse(response: CapturedResponse, fallbackType: "Epikrise" | "Notat") {
   const body = getRecord(response.body);
-  const items = asArray(readCaseInsensitive(body, fallbackType === "Epikrise" ? "Epikriser" : "Notater")).map(getRecord);
+  const primaryItems = asArray(readCaseInsensitive(body, fallbackType === "Epikrise" ? "Epikriser" : "Notater"));
+  const items = (primaryItems.length > 0 ? primaryItems : asArray(readCaseInsensitive(body, "Notater"))).map(getRecord);
   const treatmentCourseKey = parseNoegleFromUrl(response.url);
 
   return items.map(item => {

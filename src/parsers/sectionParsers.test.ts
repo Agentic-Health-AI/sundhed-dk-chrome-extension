@@ -172,6 +172,44 @@ describe("section parsers", () => {
     );
   });
 
+  it("parses journal page endpoints that return Notater arrays", () => {
+    const result = parseJournaler([
+      {
+        id: "journal-discharge-page",
+        sectionId: "journaler",
+        sectionLabel: "Journaler",
+        url: 'https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser-page?noegle={"Database":null,"Noegle":"forloeb-1","VaerdispringNoegle":null}',
+        method: "POST",
+        status: 200,
+        source: "fetch",
+        capturedAt: "2026-06-17T12:02:00.000Z",
+        body: {
+          TotalCount: 1,
+          Notater: [
+            {
+              NotatType: "Epikrise",
+              DatoFra: "2026-01-03T10:00:00+01:00",
+              Overskrift: "Udskrivningsbrev",
+              Broedtekst: "<p>Side-endpoint tekst.</p>",
+              EnhedsInformation: { Institution: "Testhospitalet", Afdeling: "Testafdeling" }
+            }
+          ]
+        }
+      }
+    ]);
+
+    expect(result.markdown).toContain("Antal journaltekster: 1");
+    expect(result.markdown).toContain("Side-endpoint tekst.");
+    expect(result.tables[0]?.rows[0]).toEqual(
+      expect.objectContaining({
+        type: "Epikrise",
+        title: "Udskrivningsbrev",
+        text: "Side-endpoint tekst.",
+        treatmentCourseKey: "forloeb-1"
+      })
+    );
+  });
+
   it("falls back to generic markdown for unsupported sections", () => {
     const result = parseSection("ukendt", []);
 

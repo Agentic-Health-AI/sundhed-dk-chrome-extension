@@ -176,7 +176,8 @@ function countJournalDocuments(responses: CapturedResponse[]) {
       return count + asArray(readCaseInsensitive(body, "Notater")).length;
     }
     if (response.url.includes("/epikriser")) {
-      return count + asArray(readCaseInsensitive(body, "Epikriser")).length;
+      const epikriser = asArray(readCaseInsensitive(body, "Epikriser"));
+      return count + (epikriser.length > 0 ? epikriser.length : asArray(readCaseInsensitive(body, "Notater")).length);
     }
     if (response.url.includes("/kontaktperioder")) {
       return count + asArray(readCaseInsensitive(body, "Kontaktperioder")).length;

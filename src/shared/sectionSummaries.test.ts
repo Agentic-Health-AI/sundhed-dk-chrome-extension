@@ -61,15 +61,18 @@ describe("section summaries", () => {
       capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser", {
         Epikriser: [{ Overskrift: "C" }]
       }),
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser-page", {
+        Notater: [{ Overskrift: "D" }]
+      }),
       capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/kontaktperioder", {
-        kontaktperioder: [{ status: "D" }]
+        kontaktperioder: [{ status: "E" }]
       })
     ]);
 
     expect(progress.status).toBe("data-found");
-    expect(progress.apiResponseCount).toBe(4);
-    expect(progress.recordCount).toBe(4);
-    expect(progress.detail).toBe("4 journaltekster fundet");
+    expect(progress.apiResponseCount).toBe(5);
+    expect(progress.recordCount).toBe(5);
+    expect(progress.detail).toBe("5 journaltekster fundet");
   });
 
   it("counts active and previous referrals from the referral endpoint", () => {

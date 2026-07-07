@@ -106,6 +106,26 @@ describe("injected hook bundle", () => {
         })
       });
     });
+    await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/filter", async route => {
+      const requestBody = route.request().postDataJSON() as { Side?: number };
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          NumberOfForloeb: 11,
+          Forloeb:
+            requestBody.Side === 2
+              ? [
+                  {
+                    AntalKontaktperioder: 0,
+                    AntalEpikriser: 0,
+                    AntalNotater: 1,
+                    IdNoegle: { Database: null, Noegle: "forloeb-2", VaerdispringNoegle: null }
+                  }
+                ]
+              : []
+        })
+      });
+    });
     await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/kontaktperioder**", route => {
       void route.fulfill({
         contentType: "application/json",
@@ -147,6 +167,15 @@ describe("injected hook bundle", () => {
     });
 
     await page.evaluate(async () => {
+      await fetch("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/filtervalg", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          DatoFra: "1999-12-02T22:00:00.000Z",
+          DatoTil: "2026-07-07T22:38:47.000Z",
+          Sektorer: ["OffentligSygehus", "PrivatHospital", "SpecialLaege", "None"]
+        })
+      });
       await fetch(
         "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt?Side=1&Sortering=updated&SortDesc=true&ItemsPerPage=10"
       );
@@ -157,7 +186,7 @@ describe("injected hook bundle", () => {
         .map(message => message.payload?.url ?? "")
         .join("\n");
       return (
-        urls.includes("forloebsoversigt?Side=2") &&
+        urls.includes("/ejournal/filter") &&
         urls.includes("/kontaktperioder") &&
         urls.includes("/epikriser") &&
         urls.split("/notater").length - 1 === 2
@@ -171,7 +200,7 @@ describe("injected hook bundle", () => {
     );
     await browser.close();
 
-    expect(urls.some(url => url.includes("forloebsoversigt?Side=2"))).toBe(true);
+    expect(urls.some(url => url.endsWith("/app/ejournalportalborger/api/ejournal/filter"))).toBe(true);
     expect(urls.some(url => url.includes("/kontaktperioder"))).toBe(true);
     expect(urls.some(url => url.includes("/epikriser"))).toBe(true);
     expect(urls.filter(url => url.includes("/notater"))).toHaveLength(2);
