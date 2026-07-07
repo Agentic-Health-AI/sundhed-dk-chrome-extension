@@ -24,6 +24,7 @@ type PendingExpansion = {
   url: string;
   method: string;
   body: unknown;
+  requestBody?: unknown;
 };
 
 let captureEnabled = false;
@@ -42,12 +43,12 @@ function patchFetch() {
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     rememberJournalRequestBody(url, init?.body);
     const response = await originalFetch(input, init);
-    void captureFetchResponse(response, url, method);
+    void captureFetchResponse(response, url, method, init?.body);
     return response;
   };
 }
 
-async function captureFetchResponse(response: Response, url: string, method: string) {
+async function captureFetchResponse(response: Response, url: string, method: string, requestBody?: unknown) {
   if (!shouldCapture(url, response.headers.get("content-type"))) {
     return;
   }
@@ -62,7 +63,7 @@ async function captureFetchResponse(response: Response, url: string, method: str
       body,
       capturedAt: new Date().toISOString()
     });
-    maybeExpandCapturedResponse(url, method, body);
+    maybeExpandCapturedResponse(url, method, body, requestBody);
   } catch {
     // Ignore non-JSON bodies even when the content-type is misleading.
   }
@@ -79,6 +80,7 @@ function patchXhr() {
 
   XMLHttpRequest.prototype.send = function patchedSend(body?: Document | XMLHttpRequestBodyInit | null) {
     const meta = this.__sundhedsarkivMeta;
+    const requestBody = body;
     if (meta) {
       rememberJournalRequestBody(meta.url, body);
     }
@@ -100,7 +102,7 @@ function patchXhr() {
           body,
           capturedAt: new Date().toISOString()
         });
-        maybeExpandCapturedResponse(meta.url, meta.method, body);
+        maybeExpandCapturedResponse(meta.url, meta.method, body, requestBody);
       } catch {
         // Ignore XHR responses that cannot be represented as JSON.
       }
@@ -156,30 +158,31 @@ function listenForCaptureStatus() {
   });
 }
 
-function maybeExpandCapturedResponse(url: string, method: string, body: unknown) {
+function maybeExpandCapturedResponse(url: string, method: string, body: unknown, requestBody?: unknown) {
   if (!captureEnabled) {
-    rememberPendingExpansion(url, method, body);
+    rememberPendingExpansion(url, method, body, requestBody);
     return;
   }
 
   markRequestSeen(method, url);
   maybeExpandJournalResponse(url, body);
+  maybeExpandJournalDocumentPageResponse(url, body, requestBody);
   maybeExpandProevesvarResponse(url);
   maybeExpandRoentgenResponse(url, body);
 }
 
-function rememberPendingExpansion(url: string, method: string, body: unknown) {
+function rememberPendingExpansion(url: string, method: string, body: unknown, requestBody?: unknown) {
   if (!isAutoExpandableUrl(url)) {
     return;
   }
 
-  pendingExpandableResponses = [...pendingExpandableResponses.slice(-9), { url, method, body }];
+  pendingExpandableResponses = [...pendingExpandableResponses.slice(-9), { url, method, body, requestBody }];
 }
 
 function flushPendingExpansions() {
   const pending = pendingExpandableResponses;
   pendingExpandableResponses = [];
-  pending.forEach(response => maybeExpandCapturedResponse(response.url, response.method, response.body));
+  pending.forEach(response => maybeExpandCapturedResponse(response.url, response.method, response.body, response.requestBody));
 }
 
 function maybeExpandJournalResponse(url: string, body: unknown) {
@@ -286,6 +289,10 @@ function scheduleJournalPageFetch(endpoint: "epikriser" | "notater", key: Record
 }
 
 function buildJournalDataTablesBody() {
+  return buildJournalDataTablesBodyWithPaging(0, 50, 1);
+}
+
+function buildJournalDataTablesBodyWithPaging(start: number, length: number, draw: number) {
   const searchableColumn = (data: string, orderable: boolean) => ({
     data,
     name: "",
@@ -295,7 +302,7 @@ function buildJournalDataTablesBody() {
   });
 
   return {
-    draw: 1,
+    draw,
     columns: [
       searchableColumn("DatoFra", true),
       searchableColumn("Overskrift", true),
@@ -303,10 +310,38 @@ function buildJournalDataTablesBody() {
       searchableColumn("NotatType", false)
     ],
     order: [{ column: 0, dir: "desc" }],
-    start: 0,
-    length: 50,
+    start,
+    length,
     search: { value: "" }
   };
+}
+
+function maybeExpandJournalDocumentPageResponse(url: string, body: unknown, requestBody: unknown) {
+  if (!isJournalDocumentPageUrl(url)) {
+    return;
+  }
+
+  const response = getRecord(body);
+  const pageItems = asArray(readCaseInsensitive(response, "Notater")).length || asArray(readCaseInsensitive(response, "Epikriser")).length;
+  const total =
+    numberValue(readCaseInsensitive(response, "TotalCount")) ||
+    numberValue(readCaseInsensitive(response, "Filtered")) ||
+    numberValue(readCaseInsensitive(response, "recordsFiltered")) ||
+    numberValue(readCaseInsensitive(response, "recordsTotal"));
+  const request = parseDataTablesRequestBody(requestBody);
+  const length = request.length || pageItems || 50;
+  const start = request.start;
+  if (total <= start + length || length <= 0) {
+    return;
+  }
+
+  for (let nextStart = start + length, pageIndex = 1; nextStart < total; nextStart += length, pageIndex += 1) {
+    scheduleApiPost(
+      url,
+      buildNextJournalDataTablesBody(request.body, nextStart, length, request.draw + pageIndex),
+      { "page-app-id": "717" }
+    );
+  }
 }
 
 function maybeExpandProevesvarResponse(url: string) {
@@ -412,6 +447,29 @@ function markRequestSeen(method: string, url: string) {
   scheduledApiRequests.add(`${method.toUpperCase()}:${new URL(absolutize(url)).href}`);
 }
 
+function parseDataTablesRequestBody(body: unknown) {
+  const parsedBody = parseJsonBody(body);
+  return {
+    body: parsedBody,
+    start: numberValue(readCaseInsensitive(parsedBody, "start")),
+    length: numberValue(readCaseInsensitive(parsedBody, "length")),
+    draw: numberValue(readCaseInsensitive(parsedBody, "draw")) || 1
+  };
+}
+
+function buildNextJournalDataTablesBody(baseBody: Record<string, unknown>, start: number, length: number, draw: number) {
+  if (Object.keys(baseBody).length === 0) {
+    return buildJournalDataTablesBodyWithPaging(start, length, draw);
+  }
+
+  return {
+    ...baseBody,
+    draw,
+    start,
+    length
+  };
+}
+
 function getFetchUrl(input: RequestInfo | URL) {
   if (input instanceof Request) {
     return input.url;
@@ -441,8 +499,17 @@ function isJournalExpandableUrl(url: string) {
   }
 }
 
+function isJournalDocumentPageUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.pathname === `${EJOURNAL_API_BASE}/epikriser-page` || parsed.pathname === `${EJOURNAL_API_BASE}/notater-page`;
+  } catch {
+    return false;
+  }
+}
+
 function isAutoExpandableUrl(url: string) {
-  return isJournalExpandableUrl(url) || isProevesvarSvaroversigtUrl(url) || isRoentgenHenvisningerUrl(url);
+  return isJournalExpandableUrl(url) || isJournalDocumentPageUrl(url) || isProevesvarSvaroversigtUrl(url) || isRoentgenHenvisningerUrl(url);
 }
 
 function isProevesvarSvaroversigtUrl(url: string) {

@@ -301,6 +301,99 @@ describe("injected hook bundle", () => {
     expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
   });
 
+  it("expands journal note page endpoints until all DataTables pages are requested", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt**", route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          NumberOfForloeb: 1,
+          Forloeb: [
+            {
+              AntalKontaktperioder: 0,
+              AntalEpikriser: 0,
+              AntalNotater: 125,
+              IdNoegle: { Database: null, Noegle: "forloeb-many-notes", VaerdispringNoegle: null }
+            }
+          ]
+        })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater\?/, route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Notater: [] })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater-page\?/, route => {
+      const body = route.request().postDataJSON() as { start?: number; length?: number };
+      const start = body.start ?? 0;
+      const length = body.length ?? 50;
+      const remaining = Math.max(0, 125 - start);
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          TotalCount: 125,
+          Filtered: 125,
+          Notater: Array.from({ length: Math.min(length, remaining) }, (_, index) => ({
+            Overskrift: `Notat ${start + index + 1}`
+          }))
+        })
+      });
+    });
+
+    await page.goto("https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/journal-fra-sygehus/");
+    await page.evaluate(() => {
+      (window as unknown as { capturedMessages: unknown[] }).capturedMessages = [];
+      window.addEventListener("message", event => {
+        if (event.data?.source === "sundhedsarkiv:page-hook") {
+          (window as unknown as { capturedMessages: unknown[] }).capturedMessages.push(event.data);
+        }
+      });
+    });
+    await page.evaluate(readFileSync(resolve("dist/injected.js"), "utf8"));
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          source: "sundhedsarkiv:content-script",
+          type: "CAPTURE_STATUS",
+          status: "capturing"
+        },
+        window.location.origin
+      );
+    });
+
+    await page.evaluate(async () => {
+      await fetch(
+        "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt?Side=1&Sortering=updated&SortDesc=true&ItemsPerPage=10"
+      );
+    });
+
+    await page.waitForFunction(() => {
+      const starts = (window as unknown as { capturedMessages: Array<{ payload?: { url?: string; body?: unknown } }> }).capturedMessages
+        .filter(message => message.payload?.url?.includes("/notater-page"))
+        .map(message => {
+          const body = message.payload?.body as { Notater?: unknown[] } | undefined;
+          return body?.Notater?.[0] ? String((body.Notater[0] as { Overskrift?: string }).Overskrift ?? "") : "";
+        });
+      return starts.some(value => value.includes("Notat 1")) && starts.some(value => value.includes("Notat 51")) && starts.some(value => value.includes("Notat 101"));
+    });
+
+    const notePageFirstTitles = await page.evaluate(() =>
+      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string; body?: unknown } }> }).capturedMessages
+        .filter(message => message.payload?.url?.includes("/notater-page"))
+        .map(message => {
+          const body = message.payload?.body as { Notater?: unknown[] } | undefined;
+          return body?.Notater?.[0] ? String((body.Notater[0] as { Overskrift?: string }).Overskrift ?? "") : "";
+        })
+    );
+    await browser.close();
+
+    expect(notePageFirstTitles).toEqual(expect.arrayContaining(["Notat 1", "Notat 51", "Notat 101"]));
+  });
+
   it("expands proevesvar overview requests to a two year lookback while capturing", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
