@@ -1,4 +1,6 @@
 const SOURCE = "sundhedsarkiv:page-hook";
+const CONTENT_SOURCE = "sundhedsarkiv:content-script";
+const EJOURNAL_API_BASE = "/app/ejournalportalborger/api/ejournal";
 
 type SerializableResponse = {
   url: string;
@@ -9,8 +11,12 @@ type SerializableResponse = {
   capturedAt: string;
 };
 
+let captureEnabled = false;
+const scheduledJournalUrls = new Set<string>();
+
 patchFetch();
 patchXhr();
+listenForCaptureStatus();
 
 function patchFetch() {
   const originalFetch = window.fetch;
@@ -38,6 +44,7 @@ async function captureFetchResponse(response: Response, url: string, method: str
       body,
       capturedAt: new Date().toISOString()
     });
+    maybeExpandJournalResponse(url, body);
   } catch {
     // Ignore non-JSON bodies even when the content-type is misleading.
   }
@@ -70,6 +77,7 @@ function patchXhr() {
           body,
           capturedAt: new Date().toISOString()
         });
+        maybeExpandJournalResponse(meta.url, body);
       } catch {
         // Ignore XHR responses that cannot be represented as JSON.
       }
@@ -108,6 +116,107 @@ function emit(payload: SerializableResponse) {
   window.postMessage({ source: SOURCE, type: "API_RESPONSE", payload }, window.location.origin);
 }
 
+function listenForCaptureStatus() {
+  window.addEventListener("message", event => {
+    if (event.source !== window || event.origin !== window.location.origin) {
+      return;
+    }
+
+    const data = event.data as { source?: string; type?: string; status?: string };
+    if (data.source === CONTENT_SOURCE && data.type === "CAPTURE_STATUS") {
+      captureEnabled = data.status === "capturing";
+    }
+  });
+}
+
+function maybeExpandJournalResponse(url: string, body: unknown) {
+  if (!captureEnabled || !isJournalOverviewUrl(url)) {
+    return;
+  }
+
+  scheduledJournalUrls.add(new URL(absolutize(url)).href);
+  const overview = getRecord(body);
+  scheduleAdditionalOverviewPages(url, overview);
+  scheduleJournalDetailCalls(overview);
+}
+
+function scheduleAdditionalOverviewPages(url: string, overview: Record<string, unknown>) {
+  const total = numberValue(readCaseInsensitive(overview, "NumberOfForloeb"));
+  const currentForloeb = asArray(readCaseInsensitive(overview, "Forloeb")).length;
+  if (total <= currentForloeb) {
+    return;
+  }
+
+  const parsed = new URL(absolutize(url));
+  const currentPage = numberValue(parsed.searchParams.get("Side")) || 1;
+  const itemsPerPage = numberValue(parsed.searchParams.get("ItemsPerPage")) || Math.max(currentForloeb, 10);
+  const totalPages = Math.ceil(total / itemsPerPage);
+
+  for (let page = 1; page <= totalPages; page += 1) {
+    if (page === currentPage) {
+      continue;
+    }
+
+    const pageUrl = new URL(parsed.href);
+    pageUrl.searchParams.set("Side", String(page));
+    scheduleJournalFetch(pageUrl.href);
+  }
+}
+
+function scheduleJournalDetailCalls(overview: Record<string, unknown>) {
+  asArray(readCaseInsensitive(overview, "Forloeb"))
+    .map(getRecord)
+    .forEach(treatmentCourse => {
+      const key = getRecord(readCaseInsensitive(treatmentCourse, "IdNoegle"));
+      const hasKey = typeof readCaseInsensitive(key, "Noegle") === "string";
+      if (!hasKey) {
+        return;
+      }
+
+      if (numberValue(readCaseInsensitive(treatmentCourse, "AntalKontaktperioder")) > 0) {
+        scheduleJournalDetailFetch("kontaktperioder", key);
+      }
+      if (numberValue(readCaseInsensitive(treatmentCourse, "AntalEpikriser")) > 0) {
+        scheduleJournalDetailFetch("epikriser", key);
+      }
+      if (numberValue(readCaseInsensitive(treatmentCourse, "AntalNotater")) > 0) {
+        scheduleJournalDetailFetch("notater", key);
+      }
+    });
+}
+
+function scheduleJournalDetailFetch(endpoint: "kontaktperioder" | "epikriser" | "notater", key: Record<string, unknown>) {
+  const url = new URL(`${EJOURNAL_API_BASE}/${endpoint}`, window.location.origin);
+  url.searchParams.set(
+    "noegle",
+    JSON.stringify({
+      Database: readCaseInsensitive(key, "Database") ?? null,
+      Noegle: readCaseInsensitive(key, "Noegle"),
+      VaerdispringNoegle: readCaseInsensitive(key, "VaerdispringNoegle") ?? null
+    })
+  );
+  scheduleJournalFetch(url.href);
+}
+
+function scheduleJournalFetch(url: string) {
+  if (scheduledJournalUrls.has(url)) {
+    return;
+  }
+  scheduledJournalUrls.add(url);
+
+  window.setTimeout(() => {
+    void window
+      .fetch(url, {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json, text/plain, */*",
+          "page-app-id": "717"
+        }
+      })
+      .catch(() => undefined);
+  }, 0);
+}
+
 function getFetchUrl(input: RequestInfo | URL) {
   if (input instanceof Request) {
     return input.url;
@@ -117,6 +226,42 @@ function getFetchUrl(input: RequestInfo | URL) {
 
 function absolutize(url: string) {
   return new URL(url, window.location.href).href;
+}
+
+function isJournalOverviewUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.pathname === `${EJOURNAL_API_BASE}/forloebsoversigt`;
+  } catch {
+    return false;
+  }
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readCaseInsensitive(record: Record<string, unknown>, key: string) {
+  if (key in record) {
+    return record[key];
+  }
+
+  const normalizedKey = key.toLowerCase();
+  const matchingKey = Object.keys(record).find(candidate => candidate.toLowerCase() === normalizedKey);
+  return matchingKey ? record[matchingKey] : undefined;
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function parseXhrBody(xhr: XMLHttpRequest) {

@@ -11,7 +11,14 @@ describe("content script bundle", () => {
     await page.goto("https://www.sundhed.dk/test");
     await page.evaluate(() => {
       const runtimeMessages: unknown[] = [];
+      const pageHookMessages: unknown[] = [];
       (window as unknown as { runtimeMessages: unknown[] }).runtimeMessages = runtimeMessages;
+      (window as unknown as { pageHookMessages: unknown[] }).pageHookMessages = pageHookMessages;
+      window.addEventListener("message", event => {
+        if (event.data?.source === "sundhedsarkiv:content-script") {
+          pageHookMessages.push(event.data);
+        }
+      });
       (window as unknown as { chrome: unknown }).chrome = {
         runtime: {
           sendMessage: async (message: unknown) => {
@@ -73,9 +80,19 @@ describe("content script bundle", () => {
       ).length >= 2
     );
     const messages = await page.evaluate(() => (window as unknown as { runtimeMessages: unknown[] }).runtimeMessages);
+    const pageHookMessages = await page.evaluate(() => (window as unknown as { pageHookMessages: unknown[] }).pageHookMessages);
     await browser.close();
 
     expect(readFileSync(resolve("dist/content.js"), "utf8").startsWith("import")).toBe(false);
+    expect(pageHookMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "sundhedsarkiv:content-script",
+          type: "CAPTURE_STATUS",
+          status: "capturing"
+        })
+      ])
+    );
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

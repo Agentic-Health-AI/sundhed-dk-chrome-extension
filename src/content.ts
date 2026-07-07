@@ -48,6 +48,7 @@ window.addEventListener("message", event => {
 chrome.runtime.onMessage.addListener(message => {
   if (message?.type === "CAPTURE_STATUS") {
     captureStatus = message.status;
+    notifyPageHookCaptureStatus();
     renderOverlay();
   }
 });
@@ -57,7 +58,19 @@ async function refreshCaptureStatus() {
   if (response?.ok && response.data?.status) {
     captureStatus = response.data.status;
   }
+  notifyPageHookCaptureStatus();
   renderOverlay();
+}
+
+function notifyPageHookCaptureStatus() {
+  window.postMessage(
+    {
+      source: "sundhedsarkiv:content-script",
+      type: "CAPTURE_STATUS",
+      status: captureStatus
+    },
+    window.location.origin
+  );
 }
 
 function toCapturedResponse(payload: InjectedApiResponse): CapturedResponse | undefined {
