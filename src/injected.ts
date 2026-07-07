@@ -20,8 +20,15 @@ type JournalFilterBase = {
   Sektorer: unknown[];
 };
 
+type PendingExpansion = {
+  url: string;
+  method: string;
+  body: unknown;
+};
+
 let captureEnabled = false;
 let latestJournalFilterBase: JournalFilterBase | undefined;
+let pendingExpandableResponses: PendingExpansion[] = [];
 const scheduledApiRequests = new Set<string>();
 
 patchFetch();
@@ -140,13 +147,18 @@ function listenForCaptureStatus() {
 
     const data = event.data as { source?: string; type?: string; status?: string };
     if (data.source === CONTENT_SOURCE && data.type === "CAPTURE_STATUS") {
+      const wasCapturing = captureEnabled;
       captureEnabled = data.status === "capturing";
+      if (!wasCapturing && captureEnabled) {
+        flushPendingExpansions();
+      }
     }
   });
 }
 
 function maybeExpandCapturedResponse(url: string, method: string, body: unknown) {
   if (!captureEnabled) {
+    rememberPendingExpansion(url, method, body);
     return;
   }
 
@@ -154,6 +166,20 @@ function maybeExpandCapturedResponse(url: string, method: string, body: unknown)
   maybeExpandJournalResponse(url, body);
   maybeExpandProevesvarResponse(url);
   maybeExpandRoentgenResponse(url, body);
+}
+
+function rememberPendingExpansion(url: string, method: string, body: unknown) {
+  if (!isAutoExpandableUrl(url)) {
+    return;
+  }
+
+  pendingExpandableResponses = [...pendingExpandableResponses.slice(-9), { url, method, body }];
+}
+
+function flushPendingExpansions() {
+  const pending = pendingExpandableResponses;
+  pendingExpandableResponses = [];
+  pending.forEach(response => maybeExpandCapturedResponse(response.url, response.method, response.body));
 }
 
 function maybeExpandJournalResponse(url: string, body: unknown) {
@@ -413,6 +439,10 @@ function isJournalExpandableUrl(url: string) {
   } catch {
     return false;
   }
+}
+
+function isAutoExpandableUrl(url: string) {
+  return isJournalExpandableUrl(url) || isProevesvarSvaroversigtUrl(url) || isRoentgenHenvisningerUrl(url);
 }
 
 function isProevesvarSvaroversigtUrl(url: string) {

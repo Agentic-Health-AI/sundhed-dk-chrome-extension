@@ -222,6 +222,85 @@ describe("injected hook bundle", () => {
     expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
   });
 
+  it("replays journal expansion when capture status arrives after the overview response", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt**", route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          NumberOfForloeb: 1,
+          Forloeb: [
+            {
+              AntalKontaktperioder: 0,
+              AntalEpikriser: 0,
+              AntalNotater: 1,
+              IdNoegle: { Database: null, Noegle: "forloeb-late-status", VaerdispringNoegle: null }
+            }
+          ]
+        })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater\?/, route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Notater: [{ Overskrift: "Sent notat" }] })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater-page\?/, route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Notater: [{ Overskrift: "Sent notat page" }] })
+      });
+    });
+
+    await page.goto("https://www.sundhed.dk/borger/min-side/min-sundhedsjournal/journal-fra-sygehus/");
+    await page.evaluate(() => {
+      (window as unknown as { capturedMessages: unknown[] }).capturedMessages = [];
+      window.addEventListener("message", event => {
+        if (event.data?.source === "sundhedsarkiv:page-hook") {
+          (window as unknown as { capturedMessages: unknown[] }).capturedMessages.push(event.data);
+        }
+      });
+    });
+    await page.evaluate(readFileSync(resolve("dist/injected.js"), "utf8"));
+
+    await page.evaluate(async () => {
+      await fetch(
+        "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt?Side=1&Sortering=updated&SortDesc=true&ItemsPerPage=10"
+      );
+    });
+
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          source: "sundhedsarkiv:content-script",
+          type: "CAPTURE_STATUS",
+          status: "capturing"
+        },
+        window.location.origin
+      );
+    });
+
+    await page.waitForFunction(() => {
+      const urls = (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages
+        .map(message => message.payload?.url ?? "")
+        .join("\n");
+      return urls.includes("/notater?") && urls.includes("/notater-page");
+    });
+
+    const urls = await page.evaluate(() =>
+      (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages.map(
+        message => message.payload?.url ?? ""
+      )
+    );
+    await browser.close();
+
+    expect(urls.some(url => url.includes("/notater?"))).toBe(true);
+    expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
+  });
+
   it("expands proevesvar overview requests to a two year lookback while capturing", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
