@@ -82,16 +82,28 @@ export function SidePanel() {
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
   const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
 
-  async function refreshState() {
-    setLoading(true);
+  async function refreshState(options: { showLoading?: boolean } = {}) {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) {
+      setLoading(true);
+    }
+
     const response = await sendRuntimeMessage<PanelState>({ type: "GET_STATE" });
     if (response.ok && response.data) {
       setState(response.data);
       setError(undefined);
+      if (showLoading) {
+        setLoading(false);
+      }
+      return response.data;
     } else {
       setError(response.error ?? "Panelet kunne ikke hente status.");
     }
-    setLoading(false);
+
+    if (showLoading) {
+      setLoading(false);
+    }
+    return undefined;
   }
 
   async function runAction(name: string, action: () => Promise<void>) {
@@ -136,13 +148,52 @@ export function SidePanel() {
       }
 
       const section = sections[index];
+      const beforeState = await refreshState({ showLoading: false });
+      const beforeSection = findProgress(beforeState, section) ?? section;
       setAutoRun({ currentIndex: index + 1, total: sections.length, label: section.label, stopping: false });
       await sendRuntimeMessage({ type: "OPEN_SECTION", url: section.path });
-      await wait(getAutoRunWaitMs(section.sectionId));
-      await refreshState();
+      await waitForSectionToSettle(section, beforeSection);
     }
 
     setAutoRun(undefined);
+  }
+
+  async function waitForSectionToSettle(section: SectionProgress, beforeSection: SectionProgress) {
+    const startedAt = Date.now();
+    const quietMs = 2_200;
+    const pollMs = 750;
+    const timeoutMs = getAutoRunTimeoutMs(section.sectionId);
+    const noActivityTimeoutMs = getAutoRunNoActivityTimeoutMs(section.sectionId);
+    let lastFingerprint = progressFingerprint(beforeSection);
+    let lastActivityAt = startedAt;
+    let sawActivity = false;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (autoRunAbortRef.current) {
+        return;
+      }
+
+      await wait(pollMs);
+      const nextState = await refreshState({ showLoading: false });
+      const currentSection = findProgress(nextState, section);
+      const currentFingerprint = progressFingerprint(currentSection ?? beforeSection);
+      const elapsedMs = Date.now() - startedAt;
+
+      if (currentFingerprint !== lastFingerprint) {
+        sawActivity = true;
+        lastActivityAt = Date.now();
+        lastFingerprint = currentFingerprint;
+        continue;
+      }
+
+      if (!sawActivity && elapsedMs >= noActivityTimeoutMs) {
+        return;
+      }
+
+      if (sawActivity && Date.now() - lastActivityAt >= quietMs) {
+        return;
+      }
+    }
   }
 
   function stopAutomaticTour() {
@@ -357,14 +408,38 @@ function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function getAutoRunWaitMs(sectionId: SectionProgress["sectionId"]) {
+function findProgress(state: PanelState | undefined, fallback: SectionProgress) {
+  return state?.progress.find(section => section.sectionId === fallback.sectionId);
+}
+
+function progressFingerprint(section: SectionProgress) {
+  return [
+    section.sectionId,
+    section.status,
+    section.apiResponseCount,
+    section.recordCount,
+    section.lastCapturedAt ?? ""
+  ].join(":");
+}
+
+function getAutoRunTimeoutMs(sectionId: SectionProgress["sectionId"]) {
   if (sectionId === "journaler") {
-    return 8_000;
+    return 24_000;
   }
   if (sectionId === "proevesvar" || sectionId === "roentgen") {
-    return 6_000;
+    return 18_000;
   }
-  return 4_000;
+  return 12_000;
+}
+
+function getAutoRunNoActivityTimeoutMs(sectionId: SectionProgress["sectionId"]) {
+  if (sectionId === "journaler") {
+    return 9_000;
+  }
+  if (sectionId === "proevesvar" || sectionId === "roentgen") {
+    return 7_000;
+  }
+  return 5_000;
 }
 
 function ConsentGate({ onAccept }: { onAccept: () => void }) {

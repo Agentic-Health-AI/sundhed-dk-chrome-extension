@@ -26,7 +26,7 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     countRecords: responses => countBestSvaroversigt(responses),
     dataFoundDetail: count => `${count} laboratorieresultater fundet`,
     missingDetail: "Åbn prøvesvar, og vent til svaroversigten er indlæst.",
-    actionHint: "Udvid perioden på sundhed.dk, fx til 2 år, hvis du vil have mere historik med."
+    actionHint: "Sundhedsarkiv forsøger selv at hente prøvesvar 2 år tilbage, når svaroversigten indlæses."
   },
   vaccinationer: {
     recordLabel: "vaccinationer",
@@ -71,7 +71,7 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     countRecords: responses => countBilledbeskrivelser(findBody(responses, response => response.url.includes("/billedbeskrivelser/henvisninger/"))),
     dataFoundDetail: count => `${count} billedbeskrivelser fundet`,
     missingDetail: "Åbn røntgen/billedbeskrivelser, og vent til listen er indlæst.",
-    actionHint: "Klik ind på relevante beskrivelser på sundhed.dk, hvis detaljer skal med."
+    actionHint: "Sundhedsarkiv forsøger selv at hente alle sider i listen, når billedbeskrivelser indlæses."
   },
   diagnoser: {
     recordLabel: "diagnoser",

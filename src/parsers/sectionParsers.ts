@@ -344,7 +344,7 @@ export function parseJournaler(responses: CapturedResponse[]): SectionExport {
       )
     ) {
       warnings.push(
-        "Forløbsoversigten viser journalindhold, men detail-endpoints /kontaktperioder, /notater og /epikriser blev ikke fanget. Klik ind på relevante forløb/notater på sundhed.dk og eksportér igen."
+        "Forløbsoversigten viser journalindhold, men detail-endpoints /kontaktperioder, /notater og /epikriser blev ikke fanget. Åbn journaloversigten igen med opsamling aktiv, så forsøger Sundhedsarkiv selv at hente detaljerne."
       );
     } else {
       warnings.push("Ingen journalnotater eller epikriser fundet i de opsamlede responses.");
