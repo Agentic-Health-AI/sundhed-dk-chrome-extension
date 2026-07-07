@@ -14,6 +14,8 @@ export function parseSection(sectionId: SectionId, responses: CapturedResponse[]
       return parseVaccinationer(responses);
     case "diagnoser":
       return parseDiagnoser(responses);
+    case "journaler":
+      return parseJournaler(responses);
     default:
       return parseGeneric(sectionId, responses);
   }
@@ -308,6 +310,110 @@ export function parseDiagnoser(responses: CapturedResponse[]): SectionExport {
   };
 }
 
+export function parseJournaler(responses: CapturedResponse[]): SectionExport {
+  const overview = getRecord(findResponse(responses, "/forloebsoversigt")?.body);
+  const treatmentCourses = asArray(readCaseInsensitive(overview, "Forloeb")).map(getRecord);
+  const documents = [
+    ...responses
+      .filter(response => response.url.includes("/kontaktperioder"))
+      .flatMap(journalContactPeriodsFromResponse),
+    ...responses
+      .filter(response => response.url.includes("/epikriser"))
+      .flatMap(response => journalDocumentsFromResponse(response, "Epikrise")),
+    ...responses
+      .filter(response => response.url.includes("/notater"))
+      .flatMap(response => journalDocumentsFromResponse(response, "Notat"))
+  ];
+  const lines = [
+    "# Journaler",
+    "",
+    `Antal forløb i oversigt: ${treatmentCourses.length}`,
+    `Antal journaltekster: ${documents.length}`,
+    ""
+  ];
+  const warnings: string[] = [];
+
+  if (documents.length === 0) {
+    lines.push("Ingen journaltekster fundet i de opsamlede responses.", "");
+    if (
+      treatmentCourses.some(
+        course =>
+          numberValue(readCaseInsensitive(course, "AntalNotater")) > 0 ||
+          numberValue(readCaseInsensitive(course, "AntalEpikriser")) > 0 ||
+          numberValue(readCaseInsensitive(course, "AntalKontaktperioder")) > 0
+      )
+    ) {
+      warnings.push(
+        "Forløbsoversigten viser journalindhold, men detail-endpoints /kontaktperioder, /notater og /epikriser blev ikke fanget. Klik ind på relevante forløb/notater på sundhed.dk og eksportér igen."
+      );
+    } else {
+      warnings.push("Ingen journalnotater eller epikriser fundet i de opsamlede responses.");
+    }
+  } else {
+    documents.forEach((document, index) => {
+      lines.push(`## ${index + 1}. ${valueOrDash(document.title || document.type)}`);
+      lines.push(`- Type: ${valueOrDash(document.type)}`);
+      lines.push(`- Dato: ${valueOrDash(document.date)}`);
+      lines.push(`- Sygehus: ${valueOrDash(document.hospital)}`);
+      lines.push(`- Afdeling: ${valueOrDash(document.department)}`);
+      lines.push(`- Behandler: ${valueOrDash(document.clinician)}`);
+      lines.push(`- Forløbsnøgle: ${valueOrDash(document.treatmentCourseKey)}`);
+      lines.push("");
+      if (document.text) {
+        lines.push(document.text, "");
+      }
+    });
+  }
+
+  if (treatmentCourses.length > 0) {
+    lines.push("## Forløbsoversigt", "");
+    treatmentCourses.slice(0, 50).forEach((course, index) => {
+      lines.push(`### ${index + 1}. ${valueOrDash(readCaseInsensitive(course, "DiagnoseNavn") || readCaseInsensitive(course, "AfdelingNavn"))}`);
+      lines.push(`- Fra: ${valueOrDash(isoDate(readCaseInsensitive(course, "DatoFra")))}`);
+      lines.push(`- Til: ${valueOrDash(isoDate(readCaseInsensitive(course, "DatoTil")))}`);
+      lines.push(`- Sygehus: ${valueOrDash(readCaseInsensitive(course, "SygehusNavn"))}`);
+      lines.push(`- Afdeling: ${valueOrDash(readCaseInsensitive(course, "AfdelingNavn"))}`);
+      lines.push(`- Notater: ${valueOrDash(readCaseInsensitive(course, "AntalNotater"))}`);
+      lines.push(`- Epikriser: ${valueOrDash(readCaseInsensitive(course, "AntalEpikriser"))}`, "");
+    });
+  }
+
+  return {
+    id: "journaler",
+    title: "Journaler",
+    markdown: lines.join("\n"),
+    tables: [
+      {
+        name: "Journaltekster",
+        filename: "journaltekster.csv",
+        rows: documents
+      },
+      {
+        name: "Journalforløb",
+        filename: "journalforloeb.csv",
+        rows: treatmentCourses.map(course => ({
+          treatmentCourseKey: String(
+            readPath(readCaseInsensitive(course, "IdNoegle"), ["Noegle"]) ??
+              readPath(readCaseInsensitive(course, "IdNoegle"), ["noegle"]) ??
+              ""
+          ),
+          startDate: isoDate(readCaseInsensitive(course, "DatoFra")),
+          endDate: isoDate(readCaseInsensitive(course, "DatoTil")),
+          updatedDate: isoDate(readCaseInsensitive(course, "DatoOpdateret")),
+          hospital: readCaseInsensitive(course, "SygehusNavn"),
+          department: readCaseInsensitive(course, "AfdelingNavn"),
+          diagnosisName: readCaseInsensitive(course, "DiagnoseNavn"),
+          diagnosisCode: readCaseInsensitive(course, "DiagnoseKode"),
+          notesCount: readCaseInsensitive(course, "AntalNotater"),
+          dischargeLettersCount: readCaseInsensitive(course, "AntalEpikriser"),
+          contactPeriodsCount: readCaseInsensitive(course, "AntalKontaktperioder")
+        }))
+      }
+    ],
+    warnings
+  };
+}
+
 function findSvaroversigt(responses: CapturedResponse[]) {
   const candidates = responses
     .map(response => getRecord(getRecord(response.body).Svaroversigt))
@@ -332,6 +438,83 @@ function htmlToText(value: unknown) {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
   );
+}
+
+function journalDocumentsFromResponse(response: CapturedResponse, fallbackType: "Epikrise" | "Notat") {
+  const body = getRecord(response.body);
+  const items = asArray(readCaseInsensitive(body, fallbackType === "Epikrise" ? "Epikriser" : "Notater")).map(getRecord);
+  const treatmentCourseKey = parseNoegleFromUrl(response.url);
+
+  return items.map(item => {
+    const unit = getRecord(readCaseInsensitive(item, "EnhedsInformation"));
+    const title = htmlToText(readCaseInsensitive(item, "Overskrift"));
+    const bodyText = htmlToText(readCaseInsensitive(item, "Broedtekst") || readCaseInsensitive(item, "Fritekst"));
+
+    return {
+      type: readCaseInsensitive(item, "NotatType") || fallbackType,
+      date: isoDate(readCaseInsensitive(item, "DatoFra")),
+      title,
+      text: bodyText,
+      hospital: readCaseInsensitive(unit, "Institution"),
+      department: readCaseInsensitive(unit, "Afdeling"),
+      clinician: readCaseInsensitive(item, "BehandlerNavn"),
+      treatmentCourseKey
+    };
+  });
+}
+
+function journalContactPeriodsFromResponse(response: CapturedResponse) {
+  const body = getRecord(response.body);
+  const items = asArray(readCaseInsensitive(body, "Kontaktperioder")).map(getRecord);
+  const treatmentCourseKey = parseNoegleFromUrl(response.url);
+
+  return items.map(item => {
+    const unit = getRecord(readCaseInsensitive(item, "EnhedsInformation"));
+    const title = htmlToText(
+      readCaseInsensitive(item, "Status") || readCaseInsensitive(item, "Prioritet") || "Kontaktperiode"
+    );
+    const bodyText = htmlToText(readCaseInsensitive(item, "Fritekst"));
+
+    return {
+      type: "Kontaktperiode",
+      date: isoDate(readCaseInsensitive(item, "DatoFra")),
+      title,
+      text: bodyText,
+      hospital: readCaseInsensitive(unit, "Institution"),
+      department: readCaseInsensitive(unit, "Afdeling"),
+      clinician: readCaseInsensitive(item, "LaegeligAnsvarlig"),
+      treatmentCourseKey
+    };
+  });
+}
+
+function readCaseInsensitive(record: Record<string, unknown>, key: string) {
+  if (key in record) {
+    return record[key];
+  }
+
+  const normalizedKey = key.toLowerCase();
+  const matchingKey = Object.keys(record).find(candidate => candidate.toLowerCase() === normalizedKey);
+  return matchingKey ? record[matchingKey] : undefined;
+}
+
+function parseNoegleFromUrl(url: string) {
+  try {
+    const raw = new URL(url).searchParams.get("noegle");
+    if (!raw) {
+      return "";
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    const key = readCaseInsensitive(getRecord(parsed), "Noegle");
+    return typeof key === "string" ? key : "";
+  } catch {
+    return "";
+  }
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function parseGeneric(sectionId: SectionId, responses: CapturedResponse[]): SectionExport {

@@ -37,15 +37,39 @@ describe("section summaries", () => {
     expect(progress.detail).toContain("vaccinationsdata-endpointet er ikke set");
   });
 
-  it("marks journal responses as raw-only until a parser exists", () => {
+  it("keeps journal overview-only responses as needing detail clicks", () => {
     const progress = buildSectionProgress(section("journaler"), [
       capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt", {
-        Items: []
+        Forloeb: [{ AntalNotater: 2, AntalEpikriser: 1 }]
       })
     ]);
 
-    expect(progress.status).toBe("raw-only");
-    expect(progress.detail).toBe("1 journal-kald fundet som rå JSON");
+    expect(progress.status).toBe("needs-action");
+    expect(progress.recordCount).toBe(0);
+    expect(progress.recordLabel).toBe("journaltekster");
+    expect(progress.detail).toContain("Journaltekster mangler");
+  });
+
+  it("counts journal notes and discharge letters instead of API calls", () => {
+    const progress = buildSectionProgress(section("journaler"), [
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt", {
+        Forloeb: [{ AntalNotater: 1, AntalEpikriser: 1 }]
+      }),
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/notater", {
+        notater: [{ overskrift: "A" }, { overskrift: "B" }]
+      }),
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser", {
+        Epikriser: [{ Overskrift: "C" }]
+      }),
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/kontaktperioder", {
+        kontaktperioder: [{ status: "D" }]
+      })
+    ]);
+
+    expect(progress.status).toBe("data-found");
+    expect(progress.apiResponseCount).toBe(4);
+    expect(progress.recordCount).toBe(4);
+    expect(progress.detail).toBe("4 journaltekster fundet");
   });
 
   it("counts active and previous referrals from the referral endpoint", () => {

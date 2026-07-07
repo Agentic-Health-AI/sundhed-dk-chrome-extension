@@ -44,13 +44,12 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     missingDetail: "Åbn aftaler, og vent til aftalelisten er indlæst."
   },
   journaler: {
-    recordLabel: "journal-responses",
-    dataEndpointMatchers: ["/forloebsoversigt", "/datofiltrering", "/filtervalg"],
-    countRecords: responses => responses.filter(response => response.url.includes("/api/ejournal/")).length,
-    dataFoundDetail: (_count, apiCount) => `${apiCount} journal-kald fundet som rå JSON`,
-    missingDetail: "Åbn journal fra sygehus, og vent til forløbsoversigten er indlæst.",
-    actionHint: "Klik ind på relevante forløb/notater på sundhed.dk, hvis detaljerne skal med.",
-    rawOnly: true
+    recordLabel: "journaltekster",
+    dataEndpointMatchers: ["/kontaktperioder", "/notater", "/epikriser"],
+    countRecords: responses => countJournalDocuments(responses),
+    dataFoundDetail: count => `${count} journaltekster fundet`,
+    missingDetail: "Journaltekster mangler. Klik ind på relevante forløb/notater på sundhed.dk.",
+    actionHint: "Klik flere forløb/notater åbne på sundhed.dk, hvis du vil have flere journaltekster med."
   },
   henvisninger: {
     recordLabel: "henvisninger",
@@ -170,6 +169,22 @@ function countBestSvaroversigt(responses: CapturedResponse[]) {
   );
 }
 
+function countJournalDocuments(responses: CapturedResponse[]) {
+  return responses.reduce((count, response) => {
+    const body = getRecord(response.body);
+    if (response.url.includes("/notater")) {
+      return count + asArray(readCaseInsensitive(body, "Notater")).length;
+    }
+    if (response.url.includes("/epikriser")) {
+      return count + asArray(readCaseInsensitive(body, "Epikriser")).length;
+    }
+    if (response.url.includes("/kontaktperioder")) {
+      return count + asArray(readCaseInsensitive(body, "Kontaktperioder")).length;
+    }
+    return count;
+  }, 0);
+}
+
 function countHenvisninger(body: unknown) {
   const record = getRecord(body);
   return asArray(record.aktiveHenvisninger).length + asArray(record.tidligereHenvisninger).length;
@@ -181,6 +196,16 @@ function countBilledbeskrivelser(body: unknown) {
     return record.TotalItems;
   }
   return asArray(record.Svar).length;
+}
+
+function readCaseInsensitive(record: Record<string, unknown>, key: string) {
+  if (key in record) {
+    return record[key];
+  }
+
+  const normalizedKey = key.toLowerCase();
+  const matchingKey = Object.keys(record).find(candidate => candidate.toLowerCase() === normalizedKey);
+  return matchingKey ? record[matchingKey] : undefined;
 }
 
 function countDocumentsOrGroupings(body: unknown) {

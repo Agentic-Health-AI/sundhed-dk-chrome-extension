@@ -52,6 +52,9 @@ Extensionen samler API-svar op via `src/injected.ts`, som hooker `fetch` og `XML
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/datofiltrering` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/forloebsoversigt` with query keys `ItemsPerPage`, `Side`, `SortDesc`, `Sortering` | `journaler` |
 | Journaler | `GET /app/ejournalportalborger/api/ejournal/vaerdispringcheck` | `journaler` |
+| Journaler | `GET /app/ejournalportalborger/api/ejournal/kontaktperioder` with query key `noegle` | `journaler` |
+| Journaler | `GET /app/ejournalportalborger/api/ejournal/epikriser` with query key `noegle` | `journaler` |
+| Journaler | `GET /app/ejournalportalborger/api/ejournal/notater` with query key `noegle` | `journaler` |
 | Hjemmemålinger | `POST /app/hjemmemaalingerborger/api/v1/maalinger` | `hjemmemaalinger` |
 | Forløbsplaner | `GET /app/planerportalborger/api/v1/plans/` | `forloebsplaner` |
 
@@ -87,7 +90,7 @@ Disse bliver forsøgt parset af audit-runneren, men extensionens runtime ignorer
 
 Run’et dækkede side-load for hver sektion. Nogle moduler kan have ekstra detail-endpoints, som først kaldes efter klik, filtrering eller pagination:
 
-- Journal: klik på et forløb/notat kan udløse detailkald.
+- Journal: klik på et forløb/notat bør udløse detailkald til `kontaktperioder`, `epikriser` og/eller `notater`.
 - Røntgen: klik på en billedbeskrivelse kan udløse detailkald.
 - Medicin: historik, receptdetaljer og interaktionsvisninger kan udløse ekstra kald.
 - Prøvesvar: ændring af dato/filter kan udløse flere `svaroversigt` kald med andre query keys.

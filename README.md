@@ -122,7 +122,7 @@ csv/diagnoser.csv
 | Vaccinationer | Rå JSON, Markdown og CSV |
 | Aftaler | Rå JSON, Markdown og CSV |
 | Diagnoser | Rå JSON, Markdown og CSV |
-| Journaler | Rå JSON og Markdown-opsummering |
+| Journaler | Rå JSON, Markdown og CSV når notater/epikriser åbnes |
 | Henvisninger | Rå JSON og Markdown-opsummering |
 | Egen læge | Rå JSON og Markdown-opsummering |
 | Røntgen | Rå JSON og Markdown-opsummering |
