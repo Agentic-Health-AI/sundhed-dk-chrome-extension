@@ -162,6 +162,7 @@ export function SidePanel() {
     const startedAt = Date.now();
     const quietMs = 2_200;
     const pollMs = 750;
+    const minimumMs = getAutoRunMinimumMs(section.sectionId);
     const timeoutMs = getAutoRunTimeoutMs(section.sectionId);
     const noActivityTimeoutMs = getAutoRunNoActivityTimeoutMs(section.sectionId);
     let lastFingerprint = progressFingerprint(beforeSection);
@@ -186,11 +187,11 @@ export function SidePanel() {
         continue;
       }
 
-      if (!sawActivity && elapsedMs >= noActivityTimeoutMs) {
+      if (!sawActivity && elapsedMs >= noActivityTimeoutMs && elapsedMs >= minimumMs) {
         return;
       }
 
-      if (sawActivity && Date.now() - lastActivityAt >= quietMs) {
+      if (sawActivity && Date.now() - lastActivityAt >= quietMs && elapsedMs >= minimumMs) {
         return;
       }
     }
@@ -422,9 +423,25 @@ function progressFingerprint(section: SectionProgress) {
   ].join(":");
 }
 
+function getAutoRunMinimumMs(sectionId: SectionProgress["sectionId"]) {
+  if (sectionId === "journaler") {
+    return 10_000;
+  }
+  if (sectionId === "medicin") {
+    return 9_000;
+  }
+  if (sectionId === "proevesvar" || sectionId === "roentgen") {
+    return 7_000;
+  }
+  return 4_000;
+}
+
 function getAutoRunTimeoutMs(sectionId: SectionProgress["sectionId"]) {
   if (sectionId === "journaler") {
     return 24_000;
+  }
+  if (sectionId === "medicin") {
+    return 18_000;
   }
   if (sectionId === "proevesvar" || sectionId === "roentgen") {
     return 18_000;
@@ -434,6 +451,9 @@ function getAutoRunTimeoutMs(sectionId: SectionProgress["sectionId"]) {
 
 function getAutoRunNoActivityTimeoutMs(sectionId: SectionProgress["sectionId"]) {
   if (sectionId === "journaler") {
+    return 9_000;
+  }
+  if (sectionId === "medicin") {
     return 9_000;
   }
   if (sectionId === "proevesvar" || sectionId === "roentgen") {

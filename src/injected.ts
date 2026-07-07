@@ -30,6 +30,7 @@ type PendingExpansion = {
 let captureEnabled = false;
 let latestJournalFilterBase: JournalFilterBase | undefined;
 let pendingExpandableResponses: PendingExpansion[] = [];
+let latestSameOriginApiHeaders: Record<string, string> = {};
 const scheduledApiRequests = new Set<string>();
 
 patchFetch();
@@ -41,6 +42,7 @@ function patchFetch() {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = getFetchUrl(input);
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    rememberSameOriginApiHeaders(url, getFetchHeaders(input, init));
     rememberJournalRequestBody(url, init?.body);
     const response = await originalFetch(input, init);
     void captureFetchResponse(response, url, method, init?.body);
@@ -72,16 +74,25 @@ async function captureFetchResponse(response: Response, url: string, method: str
 function patchXhr() {
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
+  const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
 
   XMLHttpRequest.prototype.open = function patchedOpen(method: string, url: string | URL) {
-    this.__sundhedsarkivMeta = { method: method.toUpperCase(), url: String(url) };
+    this.__sundhedsarkivMeta = { method: method.toUpperCase(), url: String(url), headers: {} };
     return originalOpen.apply(this, arguments as unknown as Parameters<typeof originalOpen>);
+  };
+
+  XMLHttpRequest.prototype.setRequestHeader = function patchedSetRequestHeader(name: string, value: string) {
+    if (this.__sundhedsarkivMeta) {
+      this.__sundhedsarkivMeta.headers[name] = value;
+    }
+    return originalSetRequestHeader.apply(this, arguments as unknown as Parameters<typeof originalSetRequestHeader>);
   };
 
   XMLHttpRequest.prototype.send = function patchedSend(body?: Document | XMLHttpRequestBodyInit | null) {
     const meta = this.__sundhedsarkivMeta;
     const requestBody = body;
     if (meta) {
+      rememberSameOriginApiHeaders(meta.url, meta.headers);
       rememberJournalRequestBody(meta.url, body);
     }
 
@@ -298,7 +309,7 @@ function buildJournalDataTablesBodyWithPaging(start: number, length: number, dra
     name: "",
     searchable: true,
     orderable,
-    search: { value: "" }
+    search: { value: "", regex: false }
   });
 
   return {
@@ -312,7 +323,7 @@ function buildJournalDataTablesBodyWithPaging(start: number, length: number, dra
     order: [{ column: 0, dir: "desc" }],
     start,
     length,
-    search: { value: "" }
+    search: { value: "", regex: false }
   };
 }
 
@@ -407,6 +418,7 @@ function scheduleApiFetch(url: string, extraHeaders: Record<string, string> = {}
         credentials: "same-origin",
         headers: {
           accept: "application/json, text/plain, */*",
+          ...latestSameOriginApiHeaders,
           ...extraHeaders
         }
       })
@@ -435,6 +447,7 @@ function scheduleApiPost(url: string, body: Record<string, unknown>, extraHeader
         headers: {
           accept: "application/json, text/plain, */*",
           "content-type": "application/json;charset=UTF-8",
+          ...latestSameOriginApiHeaders,
           ...extraHeaders
         },
         body: serializedBody
@@ -445,6 +458,64 @@ function scheduleApiPost(url: string, body: Record<string, unknown>, extraHeader
 
 function markRequestSeen(method: string, url: string) {
   scheduledApiRequests.add(`${method.toUpperCase()}:${new URL(absolutize(url)).href}`);
+}
+
+function getFetchHeaders(input: RequestInfo | URL, init?: RequestInit) {
+  if (init?.headers) {
+    return init.headers;
+  }
+  if (input instanceof Request) {
+    return input.headers;
+  }
+  return undefined;
+}
+
+function rememberSameOriginApiHeaders(url: string, headers: HeadersInit | Record<string, string> | undefined) {
+  if (!shouldRememberHeadersForUrl(url) || !headers) {
+    return;
+  }
+
+  const safeHeaders = normalizeReusableHeaders(headers);
+  if (Object.keys(safeHeaders).length === 0) {
+    return;
+  }
+
+  latestSameOriginApiHeaders = {
+    ...latestSameOriginApiHeaders,
+    ...safeHeaders
+  };
+}
+
+function shouldRememberHeadersForUrl(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    return parsed.origin === window.location.origin && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
+  } catch {
+    return false;
+  }
+}
+
+function normalizeReusableHeaders(headers: HeadersInit | Record<string, string>) {
+  const result: Record<string, string> = {};
+  const entries =
+    headers instanceof Headers
+      ? Array.from(headers.entries())
+      : Array.isArray(headers)
+        ? headers
+        : Object.entries(headers);
+
+  entries.forEach(([name, value]) => {
+    const normalizedName = name.toLowerCase();
+    if (isReusableRequestHeader(normalizedName) && typeof value === "string" && value.length > 0) {
+      result[normalizedName] = value;
+    }
+  });
+
+  return result;
+}
+
+function isReusableRequestHeader(name: string) {
+  return name === "x-xsrf-token" || name === "conversation-uuid" || name === "page-app-id";
 }
 
 function parseDataTablesRequestBody(body: unknown) {
@@ -638,6 +709,7 @@ declare global {
     __sundhedsarkivMeta?: {
       method: string;
       url: string;
+      headers: Record<string, string>;
     };
   }
 }

@@ -77,6 +77,7 @@ describe("injected hook bundle", () => {
   it("expands journal overview responses into additional pages and detail calls while capturing", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    const notaterPageHeaders: Array<Record<string, string>> = [];
 
     await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt**", route => {
       const requestUrl = new URL(route.request().url());
@@ -139,6 +140,7 @@ describe("injected hook bundle", () => {
       });
     });
     await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater-page\?/, route => {
+      notaterPageHeaders.push(route.request().headers());
       void route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ Notater: [{ overskrift: "Notat page" }] })
@@ -181,7 +183,11 @@ describe("injected hook bundle", () => {
     await page.evaluate(async () => {
       await fetch("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/filtervalg", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "conversation-uuid": "test-conversation",
+          "x-xsrf-token": "test-xsrf-token"
+        },
         body: JSON.stringify({
           DatoFra: "1999-12-02T22:00:00.000Z",
           DatoTil: "2026-07-07T22:38:47.000Z",
@@ -220,6 +226,15 @@ describe("injected hook bundle", () => {
     expect(urls.some(url => url.includes("/epikriser-page"))).toBe(true);
     expect(urls.some(url => url.includes("/notater?"))).toBe(true);
     expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
+    expect(notaterPageHeaders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          "conversation-uuid": expect.any(String),
+          "x-xsrf-token": expect.any(String),
+          "page-app-id": "717"
+        })
+      ])
+    );
   });
 
   it("replays journal expansion when capture status arrives after the overview response", async () => {
