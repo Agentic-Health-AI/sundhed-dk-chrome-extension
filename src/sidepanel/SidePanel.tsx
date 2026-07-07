@@ -78,6 +78,7 @@ export function SidePanel() {
   const foundSections = useMemo(() => state.progress.filter(section => isSectionUseful(section)), [state.progress]);
   const isCapturing = state.status === "capturing";
   const isAutoRunning = Boolean(autoRun);
+  const isBusy = Boolean(busyAction);
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
   const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
 
@@ -199,7 +200,7 @@ export function SidePanel() {
               </div>
               <button
                 className="button button-primary"
-                disabled={busyAction === "login"}
+                disabled={isBusy}
                 onClick={() => void runAction("login", openLogin)}
               >
                 <ExternalLinkIcon />
@@ -212,7 +213,7 @@ export function SidePanel() {
             {isCapturing ? (
               <button
                 className="button button-secondary"
-                disabled={busyAction === "stop"}
+                disabled={isBusy}
                 onClick={() => void runAction("stop", async () => {
                   await sendRuntimeMessage({ type: "STOP_CAPTURE" });
                 })}
@@ -223,7 +224,7 @@ export function SidePanel() {
             ) : (
               <button
                 className="button button-primary"
-                disabled={busyAction === "start"}
+                disabled={isBusy}
                 onClick={() => void runAction("start", async () => {
                   await sendRuntimeMessage({ type: "START_CAPTURE" });
                 })}
@@ -233,7 +234,7 @@ export function SidePanel() {
               </button>
             )}
 
-            <button className="icon-button" title="Opdater status" onClick={() => void refreshState()}>
+            <button className="icon-button" title="Opdater status" disabled={isBusy} onClick={() => void refreshState()}>
               <ReloadIcon />
             </button>
           </section>
@@ -262,7 +263,7 @@ export function SidePanel() {
               ) : (
                 <button
                   className="button button-primary"
-                  disabled={Boolean(busyAction)}
+                  disabled={isBusy}
                   onClick={() => void runAction("auto-tour", runAutomaticTour)}
                 >
                   <PlayIcon />
@@ -296,7 +297,7 @@ export function SidePanel() {
             </div>
             <button
               className="button button-primary"
-              disabled={getResponseCount(state) === 0 || busyAction === "download"}
+              disabled={getResponseCount(state) === 0 || isBusy}
               onClick={() => void runAction("download", async () => {
                 await downloadArchive(state);
               })}
@@ -306,7 +307,7 @@ export function SidePanel() {
             </button>
             <button
               className="button button-ghost"
-              disabled={getResponseCount(state) === 0 || busyAction === "clear"}
+              disabled={getResponseCount(state) === 0 || isBusy}
               onClick={() => void runAction("clear", async () => {
                 await sendRuntimeMessage({ type: "CLEAR_CAPTURE" });
               })}
