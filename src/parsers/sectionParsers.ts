@@ -313,7 +313,7 @@ export function parseDiagnoser(responses: CapturedResponse[]): SectionExport {
 export function parseJournaler(responses: CapturedResponse[]): SectionExport {
   const overview = getRecord(findResponse(responses, "/forloebsoversigt")?.body);
   const treatmentCourses = asArray(readCaseInsensitive(overview, "Forloeb")).map(getRecord);
-  const documents = [
+  const documents = uniqueJournalDocuments([
     ...responses
       .filter(response => response.url.includes("/kontaktperioder"))
       .flatMap(journalContactPeriodsFromResponse),
@@ -323,7 +323,7 @@ export function parseJournaler(responses: CapturedResponse[]): SectionExport {
     ...responses
       .filter(response => response.url.includes("/notater"))
       .flatMap(response => journalDocumentsFromResponse(response, "Notat"))
-  ];
+  ]);
   const lines = [
     "# Journaler",
     "",
@@ -461,6 +461,24 @@ function journalDocumentsFromResponse(response: CapturedResponse, fallbackType: 
       clinician: readCaseInsensitive(item, "BehandlerNavn"),
       treatmentCourseKey
     };
+  });
+}
+
+function uniqueJournalDocuments<T extends Record<string, unknown>>(documents: T[]) {
+  const seen = new Set<string>();
+  return documents.filter(document => {
+    const key = [
+      document.type,
+      document.date,
+      document.title,
+      document.text,
+      document.treatmentCourseKey
+    ].join("\u001f");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
   });
 }
 

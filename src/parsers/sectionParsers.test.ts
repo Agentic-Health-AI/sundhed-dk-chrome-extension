@@ -210,6 +210,43 @@ describe("section parsers", () => {
     );
   });
 
+  it("deduplicates journal documents captured from both list and page endpoints", () => {
+    const sharedNote = {
+      NotatType: "Journalnotat",
+      DatoFra: "2026-01-02T10:00:00+01:00",
+      Overskrift: "Samme notat",
+      Broedtekst: "<p>Samme tekst.</p>",
+      EnhedsInformation: { Institution: "Testhospitalet", Afdeling: "Testafdeling" }
+    };
+    const result = parseJournaler([
+      {
+        id: "journal-note",
+        sectionId: "journaler",
+        sectionLabel: "Journaler",
+        url: 'https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/notater?noegle={"Database":null,"Noegle":"forloeb-1","VaerdispringNoegle":null}',
+        method: "GET",
+        status: 200,
+        source: "fetch",
+        capturedAt: "2026-06-17T12:01:00.000Z",
+        body: { Notater: [sharedNote] }
+      },
+      {
+        id: "journal-note-page",
+        sectionId: "journaler",
+        sectionLabel: "Journaler",
+        url: 'https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/notater-page?noegle={"Database":null,"Noegle":"forloeb-1","VaerdispringNoegle":null}',
+        method: "POST",
+        status: 200,
+        source: "fetch",
+        capturedAt: "2026-06-17T12:01:01.000Z",
+        body: { Notater: [sharedNote] }
+      }
+    ]);
+
+    expect(result.tables[0]?.rows).toHaveLength(1);
+    expect(result.markdown).toContain("Antal journaltekster: 1");
+  });
+
   it("falls back to generic markdown for unsupported sections", () => {
     const result = parseSection("ukendt", []);
 

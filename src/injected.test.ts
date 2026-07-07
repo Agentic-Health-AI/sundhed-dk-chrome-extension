@@ -132,13 +132,25 @@ describe("injected hook bundle", () => {
         body: JSON.stringify({ kontaktperioder: [{ status: "Afsluttet" }] })
       });
     });
-    await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser**", route => {
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/epikriser-page\?/, route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Notater: [{ overskrift: "Epikrise page" }] })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater-page\?/, route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ Notater: [{ overskrift: "Notat page" }] })
+      });
+    });
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/epikriser\?/, route => {
       void route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ epikriser: [{ overskrift: "Epikrise" }] })
       });
     });
-    await page.route("https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/notater**", route => {
+    await page.route(/\/app\/ejournalportalborger\/api\/ejournal\/notater\?/, route => {
       void route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ notater: [{ overskrift: "Notat" }] })
@@ -189,7 +201,9 @@ describe("injected hook bundle", () => {
         urls.includes("/ejournal/filter") &&
         urls.includes("/kontaktperioder") &&
         urls.includes("/epikriser") &&
-        urls.split("/notater").length - 1 === 2
+        urls.includes("/epikriser-page") &&
+        urls.includes("/notater") &&
+        urls.includes("/notater-page")
       );
     });
 
@@ -203,6 +217,8 @@ describe("injected hook bundle", () => {
     expect(urls.some(url => url.endsWith("/app/ejournalportalborger/api/ejournal/filter"))).toBe(true);
     expect(urls.some(url => url.includes("/kontaktperioder"))).toBe(true);
     expect(urls.some(url => url.includes("/epikriser"))).toBe(true);
-    expect(urls.filter(url => url.includes("/notater"))).toHaveLength(2);
+    expect(urls.some(url => url.includes("/epikriser-page"))).toBe(true);
+    expect(urls.some(url => url.includes("/notater?"))).toBe(true);
+    expect(urls.some(url => url.includes("/notater-page"))).toBe(true);
   });
 });

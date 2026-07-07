@@ -211,9 +211,11 @@ function scheduleJournalDetailCalls(overview: Record<string, unknown>) {
       }
       if (numberValue(readCaseInsensitive(treatmentCourse, "AntalEpikriser")) > 0) {
         scheduleJournalDetailFetch("epikriser", key);
+        scheduleJournalPageFetch("epikriser", key);
       }
       if (numberValue(readCaseInsensitive(treatmentCourse, "AntalNotater")) > 0) {
         scheduleJournalDetailFetch("notater", key);
+        scheduleJournalPageFetch("notater", key);
       }
     });
 }
@@ -229,6 +231,43 @@ function scheduleJournalDetailFetch(endpoint: "kontaktperioder" | "epikriser" | 
     })
   );
   scheduleJournalFetch(url.href);
+}
+
+function scheduleJournalPageFetch(endpoint: "epikriser" | "notater", key: Record<string, unknown>) {
+  const url = new URL(`${EJOURNAL_API_BASE}/${endpoint}-page`, window.location.origin);
+  url.searchParams.set(
+    "noegle",
+    JSON.stringify({
+      Database: readCaseInsensitive(key, "Database") ?? null,
+      Noegle: readCaseInsensitive(key, "Noegle"),
+      VaerdispringNoegle: readCaseInsensitive(key, "VaerdispringNoegle") ?? null
+    })
+  );
+  scheduleJournalPost(url.href, buildJournalDataTablesBody());
+}
+
+function buildJournalDataTablesBody() {
+  const searchableColumn = (data: string, orderable: boolean) => ({
+    data,
+    name: "",
+    searchable: true,
+    orderable,
+    search: { value: "" }
+  });
+
+  return {
+    draw: 1,
+    columns: [
+      searchableColumn("DatoFra", true),
+      searchableColumn("Overskrift", true),
+      searchableColumn("Noegle", false),
+      searchableColumn("NotatType", false)
+    ],
+    order: [{ column: 0, dir: "desc" }],
+    start: 0,
+    length: 50,
+    search: { value: "" }
+  };
 }
 
 function scheduleJournalFetch(url: string) {

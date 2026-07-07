@@ -48,8 +48,8 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     dataEndpointMatchers: ["/kontaktperioder", "/notater", "/epikriser"],
     countRecords: responses => countJournalDocuments(responses),
     dataFoundDetail: count => `${count} journaltekster fundet`,
-    missingDetail: "Journaltekster mangler. Klik ind på relevante forløb/notater på sundhed.dk.",
-    actionHint: "Klik flere forløb/notater åbne på sundhed.dk, hvis du vil have flere journaltekster med."
+    missingDetail: "Journaltekster mangler. Åbn journaloversigten igen med opsamling aktiv, så forsøger Sundhedsarkiv selv at hente detaljerne.",
+    actionHint: "Sundhedsarkiv forsøger selv at hente flere journaltekster fra forløbsoversigten."
   },
   henvisninger: {
     recordLabel: "henvisninger",
@@ -170,20 +170,41 @@ function countBestSvaroversigt(responses: CapturedResponse[]) {
 }
 
 function countJournalDocuments(responses: CapturedResponse[]) {
-  return responses.reduce((count, response) => {
+  const keys = new Set<string>();
+
+  responses.forEach(response => {
     const body = getRecord(response.body);
     if (response.url.includes("/notater")) {
-      return count + asArray(readCaseInsensitive(body, "Notater")).length;
+      addJournalDocumentKeys(keys, "notat", response.url, asArray(readCaseInsensitive(body, "Notater")));
+      return;
     }
     if (response.url.includes("/epikriser")) {
       const epikriser = asArray(readCaseInsensitive(body, "Epikriser"));
-      return count + (epikriser.length > 0 ? epikriser.length : asArray(readCaseInsensitive(body, "Notater")).length);
+      addJournalDocumentKeys(keys, "epikrise", response.url, epikriser.length > 0 ? epikriser : asArray(readCaseInsensitive(body, "Notater")));
+      return;
     }
     if (response.url.includes("/kontaktperioder")) {
-      return count + asArray(readCaseInsensitive(body, "Kontaktperioder")).length;
+      addJournalDocumentKeys(keys, "kontaktperiode", response.url, asArray(readCaseInsensitive(body, "Kontaktperioder")));
     }
-    return count;
-  }, 0);
+  });
+
+  return keys.size;
+}
+
+function addJournalDocumentKeys(keys: Set<string>, type: string, url: string, items: unknown[]) {
+  items.map(getRecord).forEach((item, index) => {
+    keys.add(
+      [
+        type,
+        parseNoegleFromUrl(url),
+        readCaseInsensitive(item, "Noegle"),
+        readCaseInsensitive(item, "DatoFra"),
+        readCaseInsensitive(item, "Overskrift"),
+        readCaseInsensitive(item, "Broedtekst") || readCaseInsensitive(item, "Fritekst"),
+        index
+      ].join("\u001f")
+    );
+  });
 }
 
 function countHenvisninger(body: unknown) {
@@ -207,6 +228,20 @@ function readCaseInsensitive(record: Record<string, unknown>, key: string) {
   const normalizedKey = key.toLowerCase();
   const matchingKey = Object.keys(record).find(candidate => candidate.toLowerCase() === normalizedKey);
   return matchingKey ? record[matchingKey] : undefined;
+}
+
+function parseNoegleFromUrl(url: string) {
+  try {
+    const raw = new URL(url).searchParams.get("noegle");
+    if (!raw) {
+      return "";
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    const key = readCaseInsensitive(getRecord(parsed), "Noegle");
+    return typeof key === "string" ? key : "";
+  } catch {
+    return "";
+  }
 }
 
 function countDocumentsOrGroupings(body: unknown) {
