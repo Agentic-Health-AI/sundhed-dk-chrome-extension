@@ -1,6 +1,7 @@
 import { asArray, getRecord } from "../parsers/helpers";
 import type { CapturedResponse, SectionId, SectionProgress } from "./types";
 import type { HealthSection } from "./sections";
+import { labResultIdentityKey } from "./labResults";
 
 type SummaryRule = {
   recordLabel: string;
@@ -168,17 +169,7 @@ function countBestSvaroversigt(responses: CapturedResponse[]) {
     asArray(getRecord(getRecord(response.body).Svaroversigt).Laboratorieresultater)
       .map(getRecord)
       .forEach(result => {
-        keys.add(
-          [
-            result.RekvisitionsId,
-            result.AnalysetypeId,
-            result.Resultatdato,
-            result.Resultat,
-            result.Vaerdi,
-            result.ProevenummerRekvirent,
-            result.ProevenummerLaboratorie
-          ].join("\u001f")
-        );
+        keys.add(labResultIdentityKey(result));
       });
   });
   return keys.size;
