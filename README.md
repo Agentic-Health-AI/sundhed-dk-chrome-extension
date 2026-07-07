@@ -12,8 +12,11 @@ Du logger selv ind på sundhed.dk, klikker dig gennem en guidet data-runde i ext
 
 - Guider dig til login på sundhed.dk.
 - Leder dig trin for trin gennem relevante sider på Min sundhedsjournal.
+- Kan køre en samlet data-runde med `Kør alle`, så sektionerne åbnes i rækkefølge.
 - Opsamler sundhed.dk API-svar fra din egen browser-session.
 - Viser løbende om der er fundet data, og hvor mange records der er fundet.
+- Forsøger selv at hente journaltekster fra forløbsoversigten, så du ikke manuelt skal åbne hvert notat.
+- Forsøger selv at hente prøvesvar 5 år tilbage i mindre intervaller.
 - Eksporterer et samlet ZIP-arkiv med rå data og mere læsbare filer.
 - Kører lokalt i Chrome. Ingen backend, ingen cloud, ingen automatisk MitID-login.
 
@@ -59,9 +62,10 @@ Når du bygger en ny version senere, skal du tilbage til `chrome://extensions` o
 4. Log selv ind på sundhed.dk med MitID.
 5. Gå tilbage til sidepanelet.
 6. Klik `Start opsamling`.
-7. Klik dig gennem sektionerne under `Trin 2`.
-8. Vent et øjeblik på hver side, indtil tallet i sidepanelet opdateres.
-9. Klik `Download arkiv`, når du er færdig.
+7. Klik `Kør alle`, eller åbn sektionerne én ad gangen under `Trin 2`.
+8. Vent på hver side, indtil tallet i sidepanelet opdateres.
+9. Brug `Opdater status`, hvis sidepanelet ikke har opdateret efter nogle sekunder.
+10. Klik `Download arkiv`, når du er færdig.
 
 Du behøver ikke have data i alle sektioner. `0 records` kan være helt korrekt, hvis sundhed.dk ikke har noget at vise for dig i den sektion.
 
@@ -71,13 +75,26 @@ Prøvesvar er en af de vigtigste sektioner at teste grundigt.
 
 Når du åbner prøvesvar:
 
-- Tjek om sundhed.dk viser en periodevælger eller filter.
-- Sundhedsarkiv forsøger automatisk at hente prøvesvar 5 år tilbage, når svaroversigten er indlæst.
+- Sundhedsarkiv venter på sundhed.dk's eget svaroversigt-kald.
+- Når det kald er indlæst, genbruger extensionen de nødvendige session-headers fra browseren.
+- Derefter forsøger den automatisk at hente prøvesvar 5 år tilbage i halvårsintervaller.
 - Vent på at listen er færdig med at indlæse.
 - Kig i sidepanelet efter records, ikke kun API-kald.
-- Hvis der mangler gamle prøvesvar, så prøv at ændre perioden igen og vent på ny indlæsning.
+- Hvis der mangler gamle prøvesvar, så genindlæs prøvesvar-siden med opsamling aktiv og vent på ny indlæsning.
 
 Hvis sidepanelet viser få records, men siden visuelt viser mange prøvesvar, er det en fejl vi bør undersøge med et nyt `test-run`.
+
+## Tips til journaler
+
+Journaler kræver mere end bare forløbsoversigten. Sundhedsarkiv forsøger derfor selv at hente:
+
+- flere sider af forløbsoversigten
+- kontaktperioder
+- epikriser
+- notater
+- ekstra notat-/epikrise-sider, hvis sundhed.dk paginerer indholdet
+
+Hvis journaler viser `Kræver handling`, så åbn journaloversigten igen med opsamling aktiv og vent lidt længere. Hvis der stadig mangler journaltekster, så lav et nyt test-run fra den session.
 
 ## Hvad ligger i ZIP-filen?
 
@@ -157,6 +174,13 @@ Det kan være korrekt, hvis du ikke har data i sektionen. Hvis sundhed.dk tydeli
 
 Kig først i `raw/<sektion>.json`. Hvis data findes i `raw/`, men ikke i CSV, mangler parseren at blive forbedret. Hvis data ikke findes i `raw/`, fangede extensionen ikke API-kaldet.
 
+### Prøvesvar bliver ved med kun at vise de nyeste 20
+
+- Tjek at du har reloadet extensionen i `chrome://extensions` efter seneste build.
+- Genindlæs prøvesvar-siden, mens opsamling er aktiv.
+- Vent til sidepanelet viser flere `laboratorieresultater`, ikke kun flere API-kald.
+- Hvis tallet stadig er 20, så eksportér et nyt test-run og tjek `raw/proevesvar.json` for flere `svaroversigt`-kald med ældre `fra`/`til`-perioder.
+
 ## Udvikling
 
 De vigtigste kommandoer:
@@ -171,13 +195,7 @@ npm test
 
 `npm test` kører Vitest-testene. Testene bruger lokale fixtures og simulerede sundhed.dk-svar. De logger ikke ind med MitID og kalder ikke live sundhed.dk.
 
-Der findes også et audit-script:
-
-```bash
-node scripts/audit-sundhed-api.mjs test-run
-```
-
-Brug det til at gennemgå et lokalt test-run og se, hvilke API-kald og sektioner der blev fanget.
+Live-verifikation mod sundhed.dk kræver en rigtig Chrome-session, hvor brugeren selv logger ind. Brug ikke cookies, tokens eller rå sundhedsdata i commits, logs eller screenshots.
 
 ## Privatliv og sikkerhed
 
