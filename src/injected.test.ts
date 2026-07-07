@@ -409,7 +409,7 @@ describe("injected hook bundle", () => {
     expect(notePageFirstTitles).toEqual(expect.arrayContaining(["Notat 1", "Notat 51", "Notat 101"]));
   });
 
-  it("expands proevesvar overview requests to a two year lookback while capturing", async () => {
+  it("expands proevesvar overview requests to a five year lookback while capturing", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
 
@@ -450,7 +450,7 @@ describe("injected hook bundle", () => {
     await page.waitForFunction(() =>
       (window as unknown as { capturedMessages: Array<{ payload?: { url?: string } }> }).capturedMessages.some(message => {
         const url = message.payload?.url;
-        return url ? new URL(url).searchParams.get("fra") === "2024-07-08T00:00:00" : false;
+        return url ? new URL(url).searchParams.get("fra") === "2021-07-08T00:00:00" : false;
       })
     );
 
@@ -462,7 +462,7 @@ describe("injected hook bundle", () => {
     );
     await browser.close();
 
-    expect(expandedFraValues).toContain("2024-07-08T00:00:00");
+    expect(expandedFraValues).toContain("2021-07-08T00:00:00");
   });
 
   it("expands roentgen result pagination while capturing", async () => {

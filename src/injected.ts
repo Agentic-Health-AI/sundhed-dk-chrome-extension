@@ -3,7 +3,7 @@ const CONTENT_SOURCE = "sundhedsarkiv:content-script";
 const EJOURNAL_API_BASE = "/app/ejournalportalborger/api/ejournal";
 const PROEVESVAR_API_BASE = "/app/proevesvarportal/api/v1";
 const ROENTGEN_HENVISNINGER_PATH = "/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/";
-const PROEVESVAR_LOOKBACK_YEARS = 2;
+const PROEVESVAR_LOOKBACK_YEARS = 5;
 
 type SerializableResponse = {
   url: string;

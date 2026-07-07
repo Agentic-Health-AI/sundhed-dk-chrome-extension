@@ -72,7 +72,7 @@ Prøvesvar er en af de vigtigste sektioner at teste grundigt.
 Når du åbner prøvesvar:
 
 - Tjek om sundhed.dk viser en periodevælger eller filter.
-- Udvid perioden, fx til 2 år, hvis siden tilbyder det.
+- Sundhedsarkiv forsøger automatisk at hente prøvesvar 5 år tilbage, når svaroversigten er indlæst.
 - Vent på at listen er færdig med at indlæse.
 - Kig i sidepanelet efter records, ikke kun API-kald.
 - Hvis der mangler gamle prøvesvar, så prøv at ændre perioden igen og vent på ny indlæsning.

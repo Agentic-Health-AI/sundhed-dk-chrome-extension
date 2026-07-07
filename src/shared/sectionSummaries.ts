@@ -26,7 +26,7 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     countRecords: responses => countBestSvaroversigt(responses),
     dataFoundDetail: count => `${count} laboratorieresultater fundet`,
     missingDetail: "Åbn prøvesvar, og vent til svaroversigten er indlæst.",
-    actionHint: "Sundhedsarkiv forsøger selv at hente prøvesvar 2 år tilbage, når svaroversigten indlæses."
+    actionHint: "Sundhedsarkiv forsøger selv at hente prøvesvar 5 år tilbage, når svaroversigten indlæses."
   },
   vaccinationer: {
     recordLabel: "vaccinationer",
