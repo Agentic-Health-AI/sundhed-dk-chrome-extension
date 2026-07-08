@@ -2,4 +2,15 @@ node_modules/
 dist/
 .DS_Store
 *.log
+*.zip
+*.har
+*.trace
+*.jsonl
 test-run/
+sundhed-dk-eksport-*/
+sundhed-api-audit-*/
+test-results/
+playwright-report/
+coverage/
+screenshots/
+videos/

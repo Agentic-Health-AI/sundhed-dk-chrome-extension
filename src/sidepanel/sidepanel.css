@@ -127,6 +127,31 @@ h2 {
   letter-spacing: 0;
 }
 
+.status-metrics,
+.run-status-line,
+.export-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.status-metrics span,
+.run-status-line span,
+.export-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  color: #31453e;
+  background: rgba(47, 111, 94, 0.08);
+  border: 1px solid rgba(47, 111, 94, 0.12);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .live-indicator {
   width: 13px;
   height: 13px;
@@ -324,6 +349,33 @@ h2 {
     0 18px 44px rgba(23, 59, 51, 0.08);
 }
 
+.completion-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  color: #1c3c34;
+  background: rgba(229, 238, 233, 0.76);
+  border: 1px solid rgba(47, 111, 94, 0.16);
+  border-radius: 12px;
+}
+
+.completion-card strong {
+  font-size: 13px;
+}
+
+.completion-card p,
+.export-confirmation {
+  color: #4f625a;
+  font-size: 12px;
+  line-height: 1.38;
+}
+
+.automation-panel strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
 .login-step strong {
   display: block;
   margin-bottom: 4px;
@@ -333,10 +385,58 @@ h2 {
 .login-step p,
 .automation-panel p,
 .guided-row p,
-.guided-row small {
+.guided-row small,
+.priority-status-row p {
   color: #65706b;
   font-size: 12px;
   line-height: 1.38;
+}
+
+.run-status-line {
+  margin-top: 9px;
+}
+
+.priority-status-list {
+  display: grid;
+  gap: 8px;
+}
+
+.priority-status-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(47, 111, 94, 0.1);
+  border-radius: 12px;
+}
+
+.priority-status-row span {
+  display: block;
+  color: #22312d;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.priority-status-row p {
+  margin-top: 3px;
+}
+
+.priority-status-row strong {
+  color: #66736d;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+}
+
+.priority-status-row[data-status="data-found"] strong,
+.priority-status-row[data-status="raw-only"] strong {
+  color: #2f6f5e;
+}
+
+.priority-status-row[data-status="needs-action"] strong {
+  color: #8a5a16;
 }
 
 .guided-row {
@@ -423,6 +523,21 @@ h2 {
   gap: 10px;
   padding: 14px;
   border-radius: 16px;
+}
+
+.export-state {
+  display: block;
+  margin: 6px 0 4px;
+  color: #22312d;
+  font-size: 13px;
+}
+
+.export-meta {
+  margin-top: 9px;
+}
+
+.export-confirmation {
+  margin-top: 8px;
 }
 
 .empty-state {

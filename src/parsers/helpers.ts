@@ -33,7 +33,8 @@ export function valueOrDash(value: unknown) {
 }
 
 export function csvEscape(value: unknown) {
-  const text = value === null || value === undefined ? "" : String(value);
+  const rawText = value === null || value === undefined ? "" : String(value);
+  const text = /^[=+\-@\t\r]/.test(rawText) ? `'${rawText}` : rawText;
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

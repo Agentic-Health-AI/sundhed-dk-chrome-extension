@@ -28,6 +28,13 @@ type AutoRunState = {
   stopping: boolean;
 };
 
+type AutoRunSummary = {
+  completedAt: string;
+  found: number;
+  needsAction: number;
+  notStarted: number;
+};
+
 const emptyState: PanelState = {
   status: "idle",
   responses: [],
@@ -54,6 +61,8 @@ export function SidePanel() {
   const [error, setError] = useState<string | undefined>();
   const [consented, setConsented] = useState(false);
   const [autoRun, setAutoRun] = useState<AutoRunState | undefined>();
+  const [autoRunSummary, setAutoRunSummary] = useState<AutoRunSummary | undefined>();
+  const [downloadedAt, setDownloadedAt] = useState<string | undefined>();
   const autoRunAbortRef = useRef(false);
 
   useEffect(() => {
@@ -81,6 +90,9 @@ export function SidePanel() {
   const isBusy = Boolean(busyAction);
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
   const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
+  const responseCount = getResponseCount(state);
+  const exportReady = responseCount > 0;
+  const importantSections = state.progress.filter(section => section.sectionId === "proevesvar" || section.sectionId === "journaler");
 
   async function refreshState(options: { showLoading?: boolean } = {}) {
     const showLoading = options.showLoading ?? true;
@@ -137,6 +149,7 @@ export function SidePanel() {
 
   async function runAutomaticTour() {
     autoRunAbortRef.current = false;
+    setAutoRunSummary(undefined);
     if (!isCapturing) {
       await sendRuntimeMessage({ type: "START_CAPTURE" });
     }
@@ -155,6 +168,8 @@ export function SidePanel() {
       await waitForSectionToSettle(section, beforeSection);
     }
 
+    const finalState = await refreshState({ showLoading: false });
+    setAutoRunSummary(buildAutoRunSummary(finalState?.progress ?? state.progress));
     setAutoRun(undefined);
   }
 
@@ -202,6 +217,17 @@ export function SidePanel() {
     setAutoRun(current => (current ? { ...current, stopping: true } : undefined));
   }
 
+  async function clearCapturedData() {
+    const confirmed = window.confirm("Ryd kun den midlertidige opsamling i Chrome? Din downloadede ZIP-fil bliver ikke slettet.");
+    if (!confirmed) {
+      return;
+    }
+
+    await sendRuntimeMessage({ type: "CLEAR_CAPTURE" });
+    setAutoRunSummary(undefined);
+    setDownloadedAt(undefined);
+  }
+
   return (
     <main className="panel-shell">
       <header className="panel-header">
@@ -221,14 +247,19 @@ export function SidePanel() {
           <section className="status-band" data-state={isCapturing ? "active" : "idle"}>
             <div>
               <span className="eyebrow">Status</span>
-              <strong>{isCapturing ? "Opsamler data" : getResponseCount(state) > 0 ? "Data klar til eksport" : "Klar til login"}</strong>
+              <strong>{isCapturing ? "Opsamler data" : exportReady ? "Eksport klar" : "Log ind for at starte"}</strong>
               <p>
                 {isCapturing
                   ? "Åbn en sektion nedenfor, og vent på at data-tallet opdateres."
-                  : getResponseCount(state) > 0
+                  : exportReady
                     ? `${foundSections.length} sektioner har brugbare data.`
                     : "Start med at logge ind på sundhed.dk."}
               </p>
+              <div className="status-metrics" aria-label="Kort status">
+                <span>{responseCount} tekniske svar</span>
+                <span>{foundSections.length} af {state.progress.length} sektioner med data</span>
+                <span>{exportReady ? "Eksport klar" : "Eksport venter"}</span>
+              </div>
             </div>
             <div className="live-indicator" aria-hidden="true" />
           </section>
@@ -291,7 +322,7 @@ export function SidePanel() {
             </button>
           </section>
 
-          {!onSundhed && getResponseCount(state) === 0 ? <NotOnSundhed /> : null}
+          {!onSundhed && responseCount === 0 ? <NotOnSundhed /> : null}
 
           <section className="section-block">
             <div className="section-heading">
@@ -300,12 +331,18 @@ export function SidePanel() {
             </div>
             <div className="automation-panel" data-running={isAutoRunning ? "true" : "false"}>
               <div>
-                <strong>{autoRun ? `${autoRun.label}` : "Kør data-runde"}</strong>
+                <strong>{autoRun ? `${autoRun.label}` : "Kør alle sektioner"}</strong>
                 <p>
                   {autoRun
                     ? `${autoRun.currentIndex} af ${autoRun.total}. ${autoRun.stopping ? "Stopper efter den aktuelle side." : "Venter på at siden indlæser data."}`
-                    : "Åbner hver sektion i rækkefølge og opsamler data automatisk, når sundhed.dk svarer."}
+                    : loginLikelyDone
+                      ? "Åbner hver sektion i rækkefølge og gemmer svarene, når sundhed.dk viser dem."
+                      : "Log ind på sundhed.dk først. Derefter kan Sundhedsarkiv åbne sektionerne for dig."}
                 </p>
+                <div className="run-status-line" aria-live="polite">
+                  <span>{autoRun ? "Kør alle er i gang" : `${foundSections.length} af ${state.progress.length} sektioner har data`}</span>
+                  <span>{importantStatusText(importantSections)}</span>
+                </div>
               </div>
               {autoRun ? (
                 <button className="button button-secondary" onClick={stopAutomaticTour}>
@@ -315,7 +352,8 @@ export function SidePanel() {
               ) : (
                 <button
                   className="button button-primary"
-                  disabled={isBusy}
+                  disabled={isBusy || !loginLikelyDone}
+                  title={loginLikelyDone ? "Kør alle sektioner" : "Log ind på sundhed.dk først"}
                   onClick={() => void runAction("auto-tour", runAutomaticTour)}
                 >
                   <PlayIcon />
@@ -323,6 +361,8 @@ export function SidePanel() {
                 </button>
               )}
             </div>
+            {autoRunSummary ? <AutoRunSummaryCard summary={autoRunSummary} /> : null}
+            <ImportantSectionStatus sections={importantSections} />
             {loading ? (
               <SkeletonList />
             ) : (
@@ -344,24 +384,35 @@ export function SidePanel() {
           <section className="export-panel">
             <div>
               <span className="eyebrow">Eksport</span>
-              <h2>Samlet arkiv</h2>
-              <p>{exportReadinessText(state.progress)}</p>
+              <h2>Samlet ZIP-arkiv</h2>
+              <strong className="export-state">{exportReady ? "Klar til download" : "Venter på opsamlede data"}</strong>
+              <p>{exportReadinessText(state.progress, responseCount)}</p>
+              <div className="export-meta" aria-label="Eksportindhold">
+                <span>{responseCount} tekniske svar</span>
+                <span>Læsbart dokument, regneark og tekniske originaldata</span>
+              </div>
+              {downloadedAt ? (
+                <p className="export-confirmation">
+                  Download startet {formatTime(downloadedAt)}. Gem ZIP-filen et sikkert sted, og ryd den midlertidige opsamling når du er færdig.
+                </p>
+              ) : null}
             </div>
             <button
               className="button button-primary"
-              disabled={getResponseCount(state) === 0 || isBusy}
+              disabled={!exportReady || isBusy}
               onClick={() => void runAction("download", async () => {
                 await downloadArchive(state);
+                setDownloadedAt(new Date().toISOString());
               })}
             >
               <DownloadIcon />
-              Download arkiv
+              Download ZIP
             </button>
             <button
               className="button button-ghost"
-              disabled={getResponseCount(state) === 0 || isBusy}
+              disabled={!exportReady || isBusy}
               onClick={() => void runAction("clear", async () => {
-                await sendRuntimeMessage({ type: "CLEAR_CAPTURE" });
+                await clearCapturedData();
               })}
             >
               <TrashIcon />
@@ -376,6 +427,37 @@ export function SidePanel() {
         <span>Data gemmes midlertidigt i Chrome, ryddes efter inaktivitet og sendes ikke til en server.</span>
       </footer>
     </main>
+  );
+}
+
+function ImportantSectionStatus({ sections }: { sections: SectionProgress[] }) {
+  if (sections.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="priority-status-list" aria-label="Status for prøvesvar og journaler">
+      {sections.map(section => (
+        <div className="priority-status-row" key={section.sectionId} data-status={section.status}>
+          <div>
+            <span>{section.label}</span>
+            <p>{importantDetailText(section)}</p>
+          </div>
+          <strong>{statusLabel(section)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AutoRunSummaryCard({ summary }: { summary: AutoRunSummary }) {
+  return (
+    <div className="completion-card" role="status">
+      <strong>Data-runde færdig</strong>
+      <p>
+        {summary.found} sektioner har data, {summary.needsAction} kræver et ekstra kig, og {summary.notStarted} er stadig ikke gennemgået.
+      </p>
+    </div>
   );
 }
 
@@ -403,6 +485,15 @@ async function downloadArchive(state: PanelState) {
 
 function getResponseCount(state: PanelState) {
   return state.responseCount ?? state.responses.length;
+}
+
+function buildAutoRunSummary(progress: SectionProgress[]): AutoRunSummary {
+  return {
+    completedAt: new Date().toISOString(),
+    found: progress.filter(section => isSectionUseful(section)).length,
+    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened").length,
+    notStarted: progress.filter(section => section.status === "not-started").length
+  };
 }
 
 function wait(ms: number) {
@@ -581,14 +672,44 @@ function statusLabel(section: SectionProgress) {
   return "Ikke startet";
 }
 
-function exportReadinessText(progress: SectionProgress[]) {
+function importantStatusText(sections: SectionProgress[]) {
+  const readyCount = sections.filter(section => isSectionUseful(section)).length;
+  if (readyCount === sections.length && sections.length > 0) {
+    return "Prøvesvar og journaler er med";
+  }
+  if (readyCount === 0) {
+    return "Prøvesvar og journaler mangler";
+  }
+  return "Prøvesvar eller journaler mangler";
+}
+
+function importantDetailText(section: SectionProgress) {
+  if (section.status === "data-found") {
+    return `${section.recordCount} ${section.recordLabel} er klar til eksport.`;
+  }
+  if (section.status === "raw-only") {
+    return "Tekniske originaldata er gemt, men kan ikke vises som regneark endnu.";
+  }
+  if (section.status === "needs-action") {
+    return section.actionHint ?? section.detail;
+  }
+  if (section.status === "opened") {
+    return "Siden er åbnet, men der mangler stadig data.";
+  }
+  return "Ikke hentet endnu. Brug Kør alle eller åbn sektionen manuelt.";
+}
+
+function exportReadinessText(progress: SectionProgress[], responseCount: number) {
   const structured = progress.filter(section => section.status === "data-found").length;
   const rawOnly = progress.filter(section => section.status === "raw-only").length;
   const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened").length;
 
   if (structured + rawOnly + needsAction === 0) {
-    return "ZIP med rå JSON, Markdown og CSV bliver klar, når du har gennemgået mindst én sektion.";
+    if (responseCount > 0) {
+      return "ZIP med tekniske originaldata er klar. Gennemgå flere sektioner for læsbare dokumenter og regneark.";
+    }
+    return "ZIP med læsbare dokumenter, regneark og tekniske originaldata bliver klar, når du har gennemgået mindst én sektion.";
   }
 
-  return `${structured} sektioner med struktureret data, ${rawOnly} med rå JSON og ${needsAction} der kræver mere handling.`;
+  return `${structured} sektioner med regneark, ${rawOnly} med tekniske originaldata og ${needsAction} der kræver mere handling.`;
 }
