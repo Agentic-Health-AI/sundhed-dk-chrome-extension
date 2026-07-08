@@ -62,4 +62,62 @@ describe("buildArchiveBlob", () => {
     expect(zip.file("raw/ukendt.json")).toBeTruthy();
     expect(await zip.file("markdown/ukendt.md")?.async("string")).toContain("1 API-responses opsamlet");
   });
+
+  it("documents mixed capture quality in manifest and data quality receipt", async () => {
+    const failedMedicin = {
+      ...capturedResponse("medicin", "https://www.sundhed.dk/app/medicinkort2borger/api/v1/ordinations/current?status=active", {
+        message: "Forbidden"
+      }),
+      status: 403
+    };
+    const emptyPlaner = capturedResponse("forloebsplaner", "https://www.sundhed.dk/app/planerportalborger/api/v1/plans/", {
+      plans: []
+    });
+    const journalOverview = capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt", {
+      Forloeb: [{ AntalNotater: 1 }]
+    });
+
+    const blob = await buildArchiveBlob({
+      status: "idle",
+      responseCount: 3,
+      responses: [failedMedicin, emptyPlaner, journalOverview],
+      activity: [],
+      startedAt: "2026-06-17T11:00:00.000Z"
+    });
+
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const manifest = JSON.parse((await zip.file("manifest.json")?.async("string")) ?? "{}");
+    const dataQuality = await zip.file("data-kvalitet.md")?.async("string");
+
+    expect(manifest.progress).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "medicin", status: "failed", latestErrorStatus: 403 }),
+        expect.objectContaining({ id: "forloebsplaner", status: "empty", recordCount: 0 }),
+        expect.objectContaining({ id: "journaler", status: "needs-action" })
+      ])
+    );
+    expect(dataQuality).toContain("- Fejlede data-kald: 1");
+    expect(dataQuality).toContain("- Kræver et ekstra kig: 1");
+    expect(dataQuality).toContain("- Seneste fejl: HTTP 403");
+    expect(dataQuality).toContain("- Næste skridt:");
+  });
+
+  it("includes opened sections without responses in export quality progress", async () => {
+    const blob = await buildArchiveBlob({
+      status: "idle",
+      responseCount: 0,
+      responses: [],
+      activity: [],
+      openedSectionIds: ["vaccinationer"],
+      startedAt: "2026-06-17T11:00:00.000Z"
+    });
+
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const manifest = JSON.parse((await zip.file("manifest.json")?.async("string")) ?? "{}");
+    const dataQuality = await zip.file("data-kvalitet.md")?.async("string");
+
+    expect(manifest.progress).toEqual(expect.arrayContaining([expect.objectContaining({ id: "vaccinationer", status: "opened" })]));
+    expect(dataQuality).toContain("### Vaccinationer");
+    expect(dataQuality).toContain("- Status: opened");
+  });
 });

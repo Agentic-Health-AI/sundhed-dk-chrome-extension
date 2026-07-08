@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { buildSectionProgress } from "./sectionSummaries";
 import { HEALTH_SECTIONS } from "./sections";
+import { summarizeProgress } from "./progressSummary";
 import type { CapturedResponse, CaptureState, SectionId } from "./types";
 import { parseSection } from "../parsers/sectionParsers";
 import { toCsv } from "../parsers/helpers";
@@ -12,7 +13,7 @@ export async function buildArchiveBlob(state: CaptureState) {
   const exports = Array.from(responsesBySection.entries()).map(([sectionId, responses]) =>
     parseSection(sectionId, responses)
   );
-  const progress = HEALTH_SECTIONS.map(section => buildSectionProgress(section, state.responses));
+  const progress = HEALTH_SECTIONS.map(section => buildSectionProgress(section, state.responses, state.openedSectionIds ?? []));
 
   zip.file(
     "manifest.json",
@@ -101,10 +102,8 @@ function groupBySection(responses: CapturedResponse[]) {
 }
 
 function buildDataQualityMarkdown(progress: ReturnType<typeof buildSectionProgress>[], state: CaptureState, capturedAt: string) {
-  const completed = progress.filter(section => section.status === "data-found" || section.status === "raw-only" || section.status === "empty");
-  const failed = progress.filter(section => section.status === "failed");
-  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened");
-  const notStarted = progress.filter(section => section.status === "not-started");
+  const summary = summarizeProgress(progress);
+  const completed = summary.found + summary.empty;
 
   return [
     "# Data-kvalitet",
@@ -115,10 +114,10 @@ function buildDataQualityMarkdown(progress: ReturnType<typeof buildSectionProgre
     "",
     "## Overblik",
     "",
-    `- Gennemgået med data eller 0 fund: ${completed.length}`,
-    `- Kræver et ekstra kig: ${needsAction.length}`,
-    `- Fejlede data-kald: ${failed.length}`,
-    `- Ikke gennemgået: ${notStarted.length}`,
+    `- Gennemgået med data eller 0 fund: ${completed}`,
+    `- Kræver et ekstra kig: ${summary.needsAction}`,
+    `- Fejlede data-kald: ${summary.failed}`,
+    `- Ikke gennemgået: ${summary.notStarted}`,
     "",
     "## Sektioner",
     "",

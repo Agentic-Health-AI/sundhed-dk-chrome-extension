@@ -66,6 +66,13 @@ describe("section summaries", () => {
     expect(progress.detail).toContain("Journaltekster mangler");
   });
 
+  it("marks manually opened sections without captured API responses as opened", () => {
+    const progress = buildSectionProgress(section("vaccinationer"), [], ["vaccinationer"]);
+
+    expect(progress.status).toBe("opened");
+    expect(progress.detail).toBe("Siden er åbnet, men der mangler stadig data.");
+  });
+
   it("counts journal notes and discharge letters instead of API calls", () => {
     const progress = buildSectionProgress(section("journaler"), [
       capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt", {
@@ -148,5 +155,28 @@ describe("section summaries", () => {
     expect(progress.errorResponseCount).toBe(1);
     expect(progress.latestErrorStatus).toBe(403);
     expect(progress.detail).toBe("Data-kald fejlede med HTTP 403. Prøv sektionen igen.");
+  });
+
+  it("keeps partial journal captures visible with error and expected coverage", () => {
+    const progress = buildSectionProgress(section("journaler"), [
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/forloebsoversigt", {
+        Forloeb: [{ AntalNotater: 1, AntalEpikriser: 1 }]
+      }),
+      capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/notater", {
+        Notater: [{ Overskrift: "A" }]
+      }),
+      {
+        ...capturedResponse("journaler", "https://www.sundhed.dk/app/ejournalportalborger/api/ejournal/epikriser", {
+          message: "Server error"
+        }),
+        status: 500
+      }
+    ]);
+
+    expect(progress.status).toBe("data-found");
+    expect(progress.recordCount).toBe(1);
+    expect(progress.errorResponseCount).toBe(1);
+    expect(progress.latestErrorStatus).toBe(500);
+    expect(progress.coverageDetail).toBe("1 af 2 forventede journaltekster/detailrækker fanget");
   });
 });

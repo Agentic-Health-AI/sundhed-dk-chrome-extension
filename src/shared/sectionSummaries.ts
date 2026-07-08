@@ -100,7 +100,7 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
   }
 };
 
-export function buildSectionProgress(section: HealthSection, allResponses: CapturedResponse[]): SectionProgress {
+export function buildSectionProgress(section: HealthSection, allResponses: CapturedResponse[], openedSectionIds: SectionId[] = []): SectionProgress {
   const responses = allResponses.filter(response => response.sectionId === section.id);
   const okResponses = responses.filter(isOkResponse);
   const rule = SUMMARY_RULES[section.id];
@@ -114,7 +114,14 @@ export function buildSectionProgress(section: HealthSection, allResponses: Captu
   const failedDataEndpointSeen = rule
     ? errorResponses.some(response => hasAnyMatcher(response.url, rule.dataEndpointMatchers))
     : errorResponseCount > 0;
-  const status = getStatus(apiResponseCount, recordCount, okDataEndpointSeen, failedDataEndpointSeen, Boolean(rule?.rawOnly));
+  const status = getStatus(
+    apiResponseCount,
+    recordCount,
+    okDataEndpointSeen,
+    failedDataEndpointSeen,
+    Boolean(rule?.rawOnly),
+    openedSectionIds.includes(section.id)
+  );
 
   return {
     sectionId: section.id,
@@ -140,10 +147,11 @@ function getStatus(
   recordCount: number,
   dataEndpointSeen: boolean,
   failedDataEndpointSeen: boolean,
-  rawOnly: boolean
+  rawOnly: boolean,
+  opened: boolean
 ): SectionProgress["status"] {
   if (apiResponseCount === 0) {
-    return "not-started";
+    return opened ? "opened" : "not-started";
   }
   if (!dataEndpointSeen && failedDataEndpointSeen) {
     return "failed";
@@ -175,6 +183,9 @@ function getDetail(
   }
   if (status === "needs-action") {
     return rule.missingDetail;
+  }
+  if (status === "opened") {
+    return "Siden er åbnet, men der mangler stadig data.";
   }
   if (status === "failed") {
     return latestErrorStatus ? `Data-kald fejlede med HTTP ${latestErrorStatus}. Prøv sektionen igen.` : "Data-kald fejlede. Prøv sektionen igen.";

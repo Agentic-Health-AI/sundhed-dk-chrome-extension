@@ -13,9 +13,19 @@ export function isSundhedUrl(url: string) {
 export function looksLikeSundhedApi(url: string) {
   try {
     const parsed = new URL(url);
-    return isSundhedUrl(url) && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
+    return isSundhedUrl(url) && !isBlockedSensitiveSundhedApi(url) && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
   } catch {
     return false;
+  }
+}
+
+export function isBlockedSensitiveSundhedApi(url: string) {
+  try {
+    const parsed = new URL(url);
+    const normalized = normalizeSensitiveUrlPart(`${parsed.pathname}${parsed.search}`);
+    return SENSITIVE_API_PATTERNS.some(pattern => normalized.includes(pattern));
+  } catch {
+    return true;
   }
 }
 
@@ -77,4 +87,22 @@ function stableHash(input: string) {
     hash |= 0;
   }
   return `cap_${Math.abs(hash).toString(36)}_${Date.now().toString(36)}`;
+}
+
+const SENSITIVE_API_PATTERNS = [
+  "/api/auth",
+  "/auth/mitid",
+  "ott_token",
+  "sessionid",
+  "personvaelger",
+  "personvælger",
+  "logout"
+];
+
+function normalizeSensitiveUrlPart(value: string) {
+  try {
+    return decodeURIComponent(value).toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
 }

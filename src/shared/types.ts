@@ -58,6 +58,7 @@ export type CaptureState = {
   status: CaptureStatus;
   activeTabId?: number;
   activeTabUrl?: string;
+  openedSectionIds?: SectionId[];
   startedAt?: string;
   updatedAt?: string;
   responseCount?: number;

@@ -117,10 +117,19 @@ function matchSectionFromBody(body: unknown): ContentSection | undefined {
 function looksLikeSundhedApi(url: string) {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === "www.sundhed.dk" && (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"));
+    return (
+      parsed.hostname === "www.sundhed.dk" &&
+      !isBlockedSensitiveSundhedApi(parsed) &&
+      (parsed.pathname.includes("/api/") || parsed.pathname.includes("/app/"))
+    );
   } catch {
     return false;
   }
+}
+
+function isBlockedSensitiveSundhedApi(url: URL) {
+  const normalized = normalizeSensitiveUrlPart(`${url.pathname}${url.search}`);
+  return SENSITIVE_API_PATTERNS.some(pattern => normalized.includes(pattern));
 }
 
 function stableHash(input: string) {
@@ -130,6 +139,24 @@ function stableHash(input: string) {
     hash |= 0;
   }
   return `cap_${Math.abs(hash).toString(36)}_${Date.now().toString(36)}`;
+}
+
+const SENSITIVE_API_PATTERNS = [
+  "/api/auth",
+  "/auth/mitid",
+  "ott_token",
+  "sessionid",
+  "personvaelger",
+  "personvælger",
+  "logout"
+];
+
+function normalizeSensitiveUrlPart(value: string) {
+  try {
+    return decodeURIComponent(value).toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
 }
 
 function renderOverlay() {

@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { archiveFilename, buildArchiveBlob } from "../shared/exportArchive";
 import { HEALTH_SECTIONS } from "../shared/sections";
 import { sendRuntimeMessage } from "../shared/messages";
+import { exportReadinessText, isSectionComplete, isSectionUseful, qualitySummaryText, summarizeProgress } from "../shared/progressSummary";
 import type { ActivityItem, CapturedResponse, CaptureState, SectionProgress } from "../shared/types";
 
 type PanelState = CaptureState & {
@@ -34,15 +35,6 @@ type AutoRunSummary = {
   empty: number;
   needsAction: number;
   notStarted: number;
-};
-
-type CompletenessSummary = {
-  found: number;
-  empty: number;
-  needsAction: number;
-  failed: number;
-  notStarted: number;
-  total: number;
 };
 
 const emptyState: PanelState = {
@@ -101,11 +93,11 @@ export function SidePanel() {
   const isAutoRunning = Boolean(autoRun);
   const isBusy = Boolean(busyAction);
   const onSundhed = state.activeTabUrl?.includes("sundhed.dk") ?? false;
-  const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || state.activeTabUrl?.includes("/borger/min-side"));
+  const loginLikelyDone = onSundhed && (getResponseCount(state) > 0 || Boolean(state.activeTabUrl?.includes("/borger/min-side")));
   const responseCount = getResponseCount(state);
   const exportReady = responseCount > 0;
   const importantSections = state.progress.filter(section => section.sectionId === "proevesvar" || section.sectionId === "journaler");
-  const completeness = useMemo(() => buildCompletenessSummary(state.progress), [state.progress]);
+  const completeness = useMemo(() => summarizeProgress(state.progress), [state.progress]);
 
   async function refreshState(options: { showLoading?: boolean } = {}) {
     const showLoading = options.showLoading ?? true;
@@ -268,6 +260,7 @@ export function SidePanel() {
                     ? `${foundSections.length} sektioner har brugbare data.`
                     : "Start med at logge ind på sundhed.dk."}
               </p>
+              <p className="next-step-line">Næste skridt: {nextStepText({ isCapturing, exportReady, loginLikelyDone, summary: completeness })}</p>
               <div className="status-metrics" aria-label="Kort status">
                 <span>{responseCount} tekniske svar</span>
                 <span>{foundSections.length} af {state.progress.length} sektioner med data</span>
@@ -421,7 +414,7 @@ export function SidePanel() {
               })}
             >
               <DownloadIcon />
-              Download ZIP
+              {exportReady && hasIncompleteSections(completeness) ? "Download alligevel" : "Download ZIP"}
             </button>
             <button
               className="button button-ghost"
@@ -477,7 +470,7 @@ function AutoRunSummaryCard({ summary }: { summary: AutoRunSummary }) {
   );
 }
 
-function CompletenessStrip({ summary }: { summary: CompletenessSummary }) {
+function CompletenessStrip({ summary }: { summary: ReturnType<typeof summarizeProgress> }) {
   return (
     <section className="quality-strip" aria-label="Kvalitetstjek">
       <div>
@@ -490,6 +483,9 @@ function CompletenessStrip({ summary }: { summary: CompletenessSummary }) {
         <span data-tone={summary.needsAction > 0 ? "warn" : "neutral"}>{summary.needsAction} mangler</span>
         <span data-tone={summary.failed > 0 ? "bad" : "neutral"}>{summary.failed} fejlede</span>
       </div>
+      <p className="quality-help">
+        Uden fund betyder gennemgået korrekt uden data. Mangler betyder, at siden ikke blev færdigopsamlet. Fejlede betyder, at sundhed.dk gav en teknisk fejl.
+      </p>
     </section>
   );
 }
@@ -521,23 +517,13 @@ function getResponseCount(state: PanelState) {
 }
 
 function buildAutoRunSummary(progress: SectionProgress[]): AutoRunSummary {
+  const summary = summarizeProgress(progress);
   return {
     completedAt: new Date().toISOString(),
-    found: progress.filter(section => isSectionUseful(section)).length,
-    empty: progress.filter(section => section.status === "empty").length,
-    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened" || section.status === "failed").length,
-    notStarted: progress.filter(section => section.status === "not-started").length
-  };
-}
-
-function buildCompletenessSummary(progress: SectionProgress[]): CompletenessSummary {
-  return {
-    found: progress.filter(section => isSectionUseful(section)).length,
-    empty: progress.filter(section => section.status === "empty").length,
-    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened").length,
-    failed: progress.filter(section => section.status === "failed").length,
-    notStarted: progress.filter(section => section.status === "not-started").length,
-    total: progress.length
+    found: summary.found,
+    empty: summary.empty,
+    needsAction: summary.needsAction + summary.failed,
+    notStarted: summary.notStarted
   };
 }
 
@@ -650,7 +636,7 @@ function ProgressList({
             </div>
             <p>{section.detail}</p>
             {section.coverageDetail ? <small>{section.coverageDetail}</small> : null}
-            {section.actionHint ? <small>{section.actionHint}</small> : null}
+            {section.actionHint ? <small>Næste skridt: {section.actionHint}</small> : null}
           </div>
           <button className="icon-button" title={`Saml ${section.label}`} disabled={Boolean(busyAction)} onClick={() => onOpen(section)}>
             <ExternalLinkIcon />
@@ -698,12 +684,37 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
-function isSectionUseful(section: SectionProgress) {
-  return section.status === "data-found" || section.status === "raw-only";
+function hasIncompleteSections(summary: ReturnType<typeof summarizeProgress>) {
+  return summary.needsAction + summary.failed + summary.notStarted > 0;
 }
 
-function isSectionComplete(section: SectionProgress) {
-  return isSectionUseful(section) || section.status === "empty";
+function nextStepText({
+  isCapturing,
+  exportReady,
+  loginLikelyDone,
+  summary
+}: {
+  isCapturing: boolean;
+  exportReady: boolean;
+  loginLikelyDone: boolean;
+  summary: ReturnType<typeof summarizeProgress>;
+}) {
+  if (!loginLikelyDone) {
+    return "log ind på sundhed.dk.";
+  }
+  if (!isCapturing) {
+    return exportReady ? "download ZIP eller start opsamling igen for at hente mere." : "start opsamling.";
+  }
+  if (summary.failed > 0) {
+    return "åbn sektionerne der fejlede igen.";
+  }
+  if (summary.needsAction > 0 || summary.notStarted > 0) {
+    return "tryk Kør alle eller åbn de manglende sektioner.";
+  }
+  if (exportReady) {
+    return "download ZIP-filen.";
+  }
+  return "vent på at sundhed.dk indlæser data.";
 }
 
 function statusLabel(section: SectionProgress) {
@@ -739,23 +750,6 @@ function importantStatusText(sections: SectionProgress[]) {
   return "Prøvesvar eller journaler mangler";
 }
 
-function qualitySummaryText(summary: CompletenessSummary) {
-  const completed = summary.found + summary.empty;
-  if (summary.failed > 0) {
-    return "Nogle sektioner fejlede og bør prøves igen.";
-  }
-  if (summary.needsAction > 0) {
-    return "Nogle sektioner kræver stadig et ekstra besøg.";
-  }
-  if (completed === summary.total && summary.total > 0) {
-    return "Alle sektioner er gennemgået.";
-  }
-  if (completed > 0) {
-    return `${completed} af ${summary.total} sektioner er gennemgået.`;
-  }
-  return "Kør alle for at gennemgå sektionerne.";
-}
-
 function importantDetailText(section: SectionProgress) {
   if (section.coverageDetail) {
     return section.coverageDetail;
@@ -781,20 +775,4 @@ function importantDetailText(section: SectionProgress) {
     return "Siden er åbnet, men der mangler stadig data.";
   }
   return "Ikke hentet endnu. Brug Kør alle eller åbn sektionen manuelt.";
-}
-
-function exportReadinessText(progress: SectionProgress[], responseCount: number) {
-  const structured = progress.filter(section => section.status === "data-found").length;
-  const rawOnly = progress.filter(section => section.status === "raw-only").length;
-  const empty = progress.filter(section => section.status === "empty").length;
-  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened" || section.status === "failed").length;
-
-  if (structured + rawOnly + empty + needsAction === 0) {
-    if (responseCount > 0) {
-      return "ZIP med tekniske originaldata er klar. Gennemgå flere sektioner for læsbare dokumenter og regneark.";
-    }
-    return "ZIP med læsbare dokumenter, regneark og tekniske originaldata bliver klar, når du har gennemgået mindst én sektion.";
-  }
-
-  return `${structured} sektioner med regneark, ${rawOnly} med tekniske originaldata, ${empty} gennemgået uden fund og ${needsAction} der kræver mere handling.`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSundhedUrl, looksLikeSundhedApi, matchSection, toCapturedResponse } from "./apiMatchers";
+import { isBlockedSensitiveSundhedApi, isSundhedUrl, looksLikeSundhedApi, matchSection, toCapturedResponse } from "./apiMatchers";
 
 describe("api matchers", () => {
   it("matches supported sundhed.dk API sections", () => {
@@ -42,6 +42,23 @@ describe("api matchers", () => {
     });
 
     expect(result).toEqual(expect.objectContaining({ sectionId: "ukendt", sectionLabel: "Ukendt API", method: "GET" }));
+  });
+
+  it("blocks auth and session-like sundhed.dk API payloads from raw capture", () => {
+    const authUrl = "https://www.sundhed.dk/api/auth/mitid/callback?ott_token=secret&sessionId=session";
+
+    expect(isBlockedSensitiveSundhedApi(authUrl)).toBe(true);
+    expect(looksLikeSundhedApi(authUrl)).toBe(false);
+    expect(toCapturedResponse({
+      url: authUrl,
+      method: "GET",
+      status: 200,
+      source: "fetch",
+      body: { ott_token: "secret" },
+      capturedAt: "2026-06-17T12:00:00.000Z"
+    })).toBeUndefined();
+    expect(isBlockedSensitiveSundhedApi("https://www.sundhed.dk/api/personv%C3%A6lger/current")).toBe(true);
+    expect(looksLikeSundhedApi("https://www.sundhed.dk/api/personv%C3%A6lger/current")).toBe(false);
   });
 
   it("classifies Svaroversigt payloads as lab results even when the URL is generic", () => {

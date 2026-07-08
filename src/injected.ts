@@ -34,6 +34,15 @@ let pendingExpandableResponses: PendingExpansion[] = [];
 let latestSameOriginApiHeaders: Record<string, string> = {};
 const scheduledApiRequests = new Set<string>();
 const autoScheduledApiRequests = new Set<string>();
+const SENSITIVE_API_PATTERNS = [
+  "/api/auth",
+  "/auth/mitid",
+  "ott_token",
+  "sessionid",
+  "personvaelger",
+  "personvælger",
+  "logout"
+];
 
 patchFetch();
 patchXhr();
@@ -131,7 +140,25 @@ function shouldCapture(url: string, contentType: string | null) {
   const isApi = absoluteUrl.includes("/api/") || absoluteUrl.includes("/app/");
   const isBinary = looksLikeBinaryContent(contentType);
 
-  return isSundhed && isApi && !isBinary;
+  return isSundhed && isApi && !isBinary && !isBlockedSensitiveSundhedApi(absoluteUrl);
+}
+
+function isBlockedSensitiveSundhedApi(url: string) {
+  try {
+    const parsed = new URL(absolutize(url));
+    const normalized = normalizeSensitiveUrlPart(`${parsed.pathname}${parsed.search}`);
+    return SENSITIVE_API_PATTERNS.some(pattern => normalized.includes(pattern));
+  } catch {
+    return true;
+  }
+}
+
+function normalizeSensitiveUrlPart(value: string) {
+  try {
+    return decodeURIComponent(value).toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
 }
 
 function looksLikeBinaryContent(contentType: string | null) {

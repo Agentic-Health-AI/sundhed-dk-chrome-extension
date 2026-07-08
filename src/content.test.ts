@@ -72,6 +72,21 @@ describe("content script bundle", () => {
         },
         window.location.origin
       );
+      window.postMessage(
+        {
+          source: "sundhedsarkiv:page-hook",
+          type: "API_RESPONSE",
+          payload: {
+            url: "https://www.sundhed.dk/api/auth/mitid/callback?ott_token=secret&sessionId=session",
+            method: "GET",
+            status: 200,
+            source: "fetch",
+            capturedAt: "2026-06-17T12:00:02.000Z",
+            body: { ott_token: "secret", sessionId: "session" }
+          }
+        },
+        window.location.origin
+      );
     });
 
     await page.waitForFunction(() =>
@@ -109,6 +124,16 @@ describe("content script bundle", () => {
             sectionId: "roentgen",
             sectionLabel: "Røntgen",
             url: "https://www.sundhed.dk/app/billedbeskrivelserborger/api/v1/billedbeskrivelser/henvisninger/"
+          })
+        })
+      ])
+    );
+    expect(messages).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "CAPTURED_RESPONSE",
+          payload: expect.objectContaining({
+            url: expect.stringContaining("/api/auth/mitid")
           })
         })
       ])

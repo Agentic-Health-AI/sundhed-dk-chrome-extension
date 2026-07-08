@@ -1,7 +1,7 @@
 import { addStoredResponse, clearStoredResponses, getStoredResponses } from "./shared/captureDb";
 import { buildSectionProgress } from "./shared/sectionSummaries";
 import { HEALTH_SECTIONS } from "./shared/sections";
-import type { ActivityItem, CapturedResponse, CaptureState, RuntimeMessage, RuntimeResponse } from "./shared/types";
+import type { ActivityItem, CapturedResponse, CaptureState, RuntimeMessage, RuntimeResponse, SectionId } from "./shared/types";
 
 const STATE_KEY = "captureState";
 const MAX_ACTIVITY_ITEMS = 24;
@@ -149,15 +149,16 @@ async function openSection(url: string) {
   }
 
   const state = await getState();
+  const openedSectionIds = addOpenedSectionId(state.openedSectionIds, url);
   const tab = await getActiveTab();
   if (tab?.id) {
     await chrome.tabs.update(tab.id, { url });
-    await setState({ ...state, activeTabId: tab.id, activeTabUrl: url, updatedAt: new Date().toISOString() });
+    await setState({ ...state, activeTabId: tab.id, activeTabUrl: url, openedSectionIds, updatedAt: new Date().toISOString() });
     return { tabId: tab.id };
   }
 
   const created = await chrome.tabs.create({ url });
-  await setState({ ...state, activeTabId: created.id, activeTabUrl: url, updatedAt: new Date().toISOString() });
+  await setState({ ...state, activeTabId: created.id, activeTabUrl: url, openedSectionIds, updatedAt: new Date().toISOString() });
   return { tabId: created.id };
 }
 
@@ -201,8 +202,16 @@ async function getStateWithProgress(state?: StoredCaptureState | CaptureState) {
   };
   return {
     ...captureState,
-    progress: HEALTH_SECTIONS.map(section => buildSectionProgress(section, responses))
+    progress: HEALTH_SECTIONS.map(section => buildSectionProgress(section, responses, storedState.openedSectionIds ?? []))
   };
+}
+
+function addOpenedSectionId(existing: SectionId[] | undefined, url: string) {
+  const sectionId = HEALTH_SECTIONS.find(section => section.path === url)?.id;
+  if (!sectionId) {
+    return existing;
+  }
+  return Array.from(new Set([...(existing ?? []), sectionId]));
 }
 
 function getErrorMessage(error: unknown) {

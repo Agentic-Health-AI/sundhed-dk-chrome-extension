@@ -166,6 +166,12 @@ h2 {
   animation: breathe 1.8s ease-in-out infinite;
 }
 
+.next-step-line {
+  margin-top: 7px;
+  color: #22312d;
+  font-weight: 700;
+}
+
 .quality-strip {
   display: grid;
   gap: 10px;
@@ -217,6 +223,12 @@ h2 {
   color: #9f1d1d;
   background: rgba(159, 29, 29, 0.07);
   border-color: rgba(159, 29, 29, 0.15);
+}
+
+.quality-help {
+  color: #65706b;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 @keyframes breathe {

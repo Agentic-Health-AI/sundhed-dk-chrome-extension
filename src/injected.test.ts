@@ -27,6 +27,12 @@ describe("injected hook bundle", () => {
         body: JSON.stringify({ NumberOfEffectuatedVaccinations: 1 })
       });
     });
+    await page.route("https://www.sundhed.dk/api/auth/mitid/callback**", route => {
+      void route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ott_token: "secret", sessionId: "session" })
+      });
+    });
 
     await page.goto("https://www.sundhed.dk/test");
     await page.evaluate(readFileSync(resolve("dist/injected.js"), "utf8"));
@@ -40,6 +46,7 @@ describe("injected hook bundle", () => {
     await page.evaluate(async () => {
       await fetch("https://www.sundhed.dk/app/medicinkort2borger/api/v1/ordinations/");
       await fetch("https://www.sundhed.dk/api/labsvar/svaroversigt");
+      await fetch("https://www.sundhed.dk/api/auth/mitid/callback?ott_token=secret&sessionId=session");
       const xhr = new XMLHttpRequest();
       xhr.open("GET", "https://www.sundhed.dk/app/vaccination/api/v1/overview");
       xhr.responseType = "json";
@@ -69,6 +76,16 @@ describe("injected hook bundle", () => {
           source: "sundhedsarkiv:page-hook",
           type: "API_RESPONSE",
           payload: expect.objectContaining({ source: "xhr", body: { NumberOfEffectuatedVaccinations: 1 } })
+        })
+      ])
+    );
+    expect(messages).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "API_RESPONSE",
+          payload: expect.objectContaining({
+            url: expect.stringContaining("/api/auth/mitid")
+          })
         })
       ])
     );
@@ -492,12 +509,14 @@ describe("injected hook bundle", () => {
     expect(proevesvarWindowHeaders).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          "conversation-uuid": "test-conversation",
+          "conversation-uuid": expect.any(String),
           "page-app-id": "test-page-app",
-          "x-xsrf-token": "test-xsrf-token"
+          "x-xsrf-token": expect.any(String)
         })
       ])
     );
+    expect(proevesvarWindowHeaders.every(headers => headers["conversation-uuid"]?.length > 0)).toBe(true);
+    expect(proevesvarWindowHeaders.every(headers => headers["x-xsrf-token"]?.length > 0)).toBe(true);
   });
 
   it("expands roentgen result pagination while capturing", async () => {
