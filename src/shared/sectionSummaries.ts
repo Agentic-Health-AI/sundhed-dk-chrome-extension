@@ -10,6 +10,7 @@ type SummaryRule = {
   dataFoundDetail: (recordCount: number, apiResponseCount: number) => string;
   missingDetail: string;
   actionHint?: string;
+  coverageDetail?: (responses: CapturedResponse[]) => string | undefined;
   rawOnly?: boolean;
 };
 
@@ -27,7 +28,8 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     countRecords: responses => countBestSvaroversigt(responses),
     dataFoundDetail: count => `${count} laboratorieresultater fundet`,
     missingDetail: "Åbn prøvesvar, og vent til svaroversigten er indlæst.",
-    actionHint: "Sundhedsarkiv forsøger selv at hente prøvesvar 5 år tilbage, når svaroversigten indlæses."
+    actionHint: "Sundhedsarkiv forsøger selv at hente prøvesvar 5 år tilbage, når svaroversigten indlæses.",
+    coverageDetail: responses => buildProevesvarCoverageDetail(responses)
   },
   vaccinationer: {
     recordLabel: "vaccinationer",
@@ -50,7 +52,8 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
     countRecords: responses => countJournalDocuments(responses),
     dataFoundDetail: count => `${count} journaltekster fundet`,
     missingDetail: "Journaltekster mangler. Åbn journaloversigten igen med opsamling aktiv, så forsøger Sundhedsarkiv selv at hente detaljerne.",
-    actionHint: "Sundhedsarkiv forsøger selv at hente flere journaltekster fra forløbsoversigten."
+    actionHint: "Sundhedsarkiv forsøger selv at hente flere journaltekster fra forløbsoversigten.",
+    coverageDetail: responses => buildJournalCoverageDetail(responses)
   },
   henvisninger: {
     recordLabel: "henvisninger",
@@ -99,11 +102,19 @@ const SUMMARY_RULES: Partial<Record<Exclude<SectionId, "ukendt">, SummaryRule>> 
 
 export function buildSectionProgress(section: HealthSection, allResponses: CapturedResponse[]): SectionProgress {
   const responses = allResponses.filter(response => response.sectionId === section.id);
+  const okResponses = responses.filter(isOkResponse);
   const rule = SUMMARY_RULES[section.id];
   const apiResponseCount = responses.length;
-  const recordCount = rule?.countRecords(responses) ?? apiResponseCount;
-  const dataEndpointSeen = rule ? responses.some(response => hasAnyMatcher(response.url, rule.dataEndpointMatchers)) : apiResponseCount > 0;
-  const status = getStatus(apiResponseCount, recordCount, dataEndpointSeen, Boolean(rule?.rawOnly));
+  const okResponseCount = okResponses.length;
+  const errorResponses = responses.filter(response => !isOkResponse(response));
+  const errorResponseCount = errorResponses.length;
+  const latestErrorStatus = errorResponses.at(-1)?.status;
+  const recordCount = rule?.countRecords(okResponses) ?? okResponseCount;
+  const okDataEndpointSeen = rule ? okResponses.some(response => hasAnyMatcher(response.url, rule.dataEndpointMatchers)) : okResponseCount > 0;
+  const failedDataEndpointSeen = rule
+    ? errorResponses.some(response => hasAnyMatcher(response.url, rule.dataEndpointMatchers))
+    : errorResponseCount > 0;
+  const status = getStatus(apiResponseCount, recordCount, okDataEndpointSeen, failedDataEndpointSeen, Boolean(rule?.rawOnly));
 
   return {
     sectionId: section.id,
@@ -111,11 +122,15 @@ export function buildSectionProgress(section: HealthSection, allResponses: Captu
     path: section.path,
     count: apiResponseCount,
     apiResponseCount,
+    okResponseCount,
+    errorResponseCount,
     recordCount,
     recordLabel: rule?.recordLabel ?? "API-responses",
     status,
-    detail: getDetail(rule, status, recordCount, apiResponseCount),
-    actionHint: status === "data-found" || status === "raw-only" ? rule?.actionHint : rule?.missingDetail,
+    detail: getDetail(rule, status, recordCount, apiResponseCount, latestErrorStatus),
+    actionHint: status === "data-found" || status === "raw-only" || status === "empty" ? rule?.actionHint : rule?.missingDetail,
+    coverageDetail: rule?.coverageDetail?.(okResponses),
+    latestErrorStatus,
     lastCapturedAt: responses.at(-1)?.capturedAt
   };
 }
@@ -124,10 +139,14 @@ function getStatus(
   apiResponseCount: number,
   recordCount: number,
   dataEndpointSeen: boolean,
+  failedDataEndpointSeen: boolean,
   rawOnly: boolean
 ): SectionProgress["status"] {
   if (apiResponseCount === 0) {
     return "not-started";
+  }
+  if (!dataEndpointSeen && failedDataEndpointSeen) {
+    return "failed";
   }
   if (!dataEndpointSeen) {
     return "needs-action";
@@ -135,17 +154,18 @@ function getStatus(
   if (rawOnly) {
     return "raw-only";
   }
-  if (recordCount > 0 || dataEndpointSeen) {
+  if (recordCount > 0) {
     return "data-found";
   }
-  return "opened";
+  return "empty";
 }
 
 function getDetail(
   rule: SummaryRule | undefined,
   status: SectionProgress["status"],
   recordCount: number,
-  apiResponseCount: number
+  apiResponseCount: number,
+  latestErrorStatus?: number
 ) {
   if (!rule) {
     return apiResponseCount > 0 ? `${apiResponseCount} API-kald fundet` : "Ikke gennemgået endnu";
@@ -156,7 +176,17 @@ function getDetail(
   if (status === "needs-action") {
     return rule.missingDetail;
   }
+  if (status === "failed") {
+    return latestErrorStatus ? `Data-kald fejlede med HTTP ${latestErrorStatus}. Prøv sektionen igen.` : "Data-kald fejlede. Prøv sektionen igen.";
+  }
+  if (status === "empty") {
+    return `Gennemgået: 0 ${rule.recordLabel} fundet`;
+  }
   return rule.dataFoundDetail(recordCount, apiResponseCount);
+}
+
+function isOkResponse(response: CapturedResponse) {
+  return response.status >= 200 && response.status < 300;
 }
 
 function findBody(responses: CapturedResponse[], predicate: (response: CapturedResponse) => boolean) {
@@ -173,6 +203,58 @@ function countBestSvaroversigt(responses: CapturedResponse[]) {
       });
   });
   return keys.size;
+}
+
+function buildProevesvarCoverageDetail(responses: CapturedResponse[]) {
+  const windows = responses
+    .filter(response => response.url.includes("/svaroversigt"))
+    .map(response => {
+      try {
+        const parsed = new URL(response.url);
+        return {
+          fra: parsed.searchParams.get("fra"),
+          til: parsed.searchParams.get("til")
+        };
+      } catch {
+        return { fra: null, til: null };
+      }
+    })
+    .filter((window): window is { fra: string; til: string } => Boolean(window.fra && window.til));
+
+  const uniqueWindows = new Map(windows.map(window => [`${window.fra}|${window.til}`, window]));
+  const sortedWindows = Array.from(uniqueWindows.values()).sort((left, right) => left.fra.localeCompare(right.fra));
+  const earliest = sortedWindows[0]?.fra;
+  if (!earliest) {
+    return undefined;
+  }
+
+  return `${sortedWindows.length} prøvesvar-perioder hentet, ældste fra ${formatDateOnly(earliest)}`;
+}
+
+function buildJournalCoverageDetail(responses: CapturedResponse[]) {
+  const expected = responses.reduce((sum, response) => {
+    if (!response.url.includes("/forloebsoversigt") && !response.url.includes("/ejournal/filter")) {
+      return sum;
+    }
+    return sum + asArray(getRecord(response.body).Forloeb).map(getRecord).reduce((courseSum, course) => {
+      return (
+        courseSum +
+        numberValue(readCaseInsensitive(course, "AntalNotater")) +
+        numberValue(readCaseInsensitive(course, "AntalEpikriser")) +
+        numberValue(readCaseInsensitive(course, "AntalKontaktperioder"))
+      );
+    }, 0);
+  }, 0);
+  const captured = countJournalDocuments(responses);
+  if (expected <= 0) {
+    return undefined;
+  }
+
+  if (captured > expected) {
+    return `${captured} journaltekster/detailrækker fanget; forløbsoversigten forventede mindst ${expected}`;
+  }
+
+  return `${captured} af ${expected} forventede journaltekster/detailrækker fanget`;
 }
 
 function countJournalDocuments(responses: CapturedResponse[]) {
@@ -234,6 +316,15 @@ function readCaseInsensitive(record: Record<string, unknown>, key: string) {
   const normalizedKey = key.toLowerCase();
   const matchingKey = Object.keys(record).find(candidate => candidate.toLowerCase() === normalizedKey);
   return matchingKey ? record[matchingKey] : undefined;
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDateOnly(value: string) {
+  return value.includes("T") ? value.split("T")[0] : value;
 }
 
 function parseNoegleFromUrl(url: string) {

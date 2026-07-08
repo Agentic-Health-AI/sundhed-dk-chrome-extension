@@ -39,6 +39,7 @@ describe("section summaries", () => {
     expect(progress.recordLabel).toBe("laboratorieresultater");
     expect(progress.status).toBe("data-found");
     expect(progress.detail).toBe("3 laboratorieresultater fundet");
+    expect(progress.coverageDetail).toBe("3 prøvesvar-perioder hentet, ældste fra 2023-01-01");
   });
 
   it("does not treat vaccination spot/config responses as vaccination data", () => {
@@ -88,6 +89,7 @@ describe("section summaries", () => {
     expect(progress.apiResponseCount).toBe(5);
     expect(progress.recordCount).toBe(5);
     expect(progress.detail).toBe("5 journaltekster fundet");
+    expect(progress.coverageDetail).toBe("5 journaltekster/detailrækker fanget; forløbsoversigten forventede mindst 2");
   });
 
   it("counts active and previous referrals from the referral endpoint", () => {
@@ -123,8 +125,28 @@ describe("section summaries", () => {
       })
     ]);
 
-    expect(progress.status).toBe("data-found");
+    expect(progress.status).toBe("empty");
     expect(progress.recordCount).toBe(0);
-    expect(progress.detail).toBe("0 forløbsplaner fundet");
+    expect(progress.okResponseCount).toBe(1);
+    expect(progress.errorResponseCount).toBe(0);
+    expect(progress.detail).toBe("Gennemgået: 0 forløbsplaner fundet");
+  });
+
+  it("marks failed data endpoints separately from missing user navigation", () => {
+    const progress = buildSectionProgress(section("medicin"), [
+      {
+        ...capturedResponse("medicin", "https://www.sundhed.dk/app/medicinkortet/api/v1/ordinations/current?status=active", {
+          message: "Forbidden"
+        }),
+        status: 403
+      }
+    ]);
+
+    expect(progress.status).toBe("failed");
+    expect(progress.recordCount).toBe(0);
+    expect(progress.okResponseCount).toBe(0);
+    expect(progress.errorResponseCount).toBe(1);
+    expect(progress.latestErrorStatus).toBe(403);
+    expect(progress.detail).toBe("Data-kald fejlede med HTTP 403. Prøv sektionen igen.");
   });
 });

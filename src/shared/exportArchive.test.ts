@@ -16,6 +16,7 @@ describe("buildArchiveBlob", () => {
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const manifest = JSON.parse((await zip.file("manifest.json")?.async("string")) ?? "{}");
     const markdown = await zip.file("sundhed-dk-eksport.md")?.async("string");
+    const dataQuality = await zip.file("data-kvalitet.md")?.async("string");
     const medicinCsv = await zip.file("csv/medicin.csv")?.async("string");
 
     expect(manifest.responseCount).toBe(4);
@@ -24,6 +25,8 @@ describe("buildArchiveBlob", () => {
         expect.objectContaining({
           id: "medicin",
           apiResponseCount: 3,
+          okResponseCount: 3,
+          errorResponseCount: 0,
           recordCount: 1,
           recordLabel: "medicinrækker"
         }),
@@ -38,6 +41,8 @@ describe("buildArchiveBlob", () => {
     expect(zip.file("raw/medicin.json")).toBeTruthy();
     expect(zip.file("raw/aftaler.json")).toBeTruthy();
     expect(markdown).toContain("Sundhed.dk eksport");
+    expect(dataQuality).toContain("Data-kvalitet");
+    expect(dataQuality).toContain("Tekniske svar: 3 (3 ok, 0 fejl)");
     expect(medicinCsv).toContain("drugName");
     expect(medicinCsv).toContain("Ovison");
   });

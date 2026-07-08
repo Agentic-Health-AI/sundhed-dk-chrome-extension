@@ -21,6 +21,10 @@ chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
 
+chrome.runtime.onStartup.addListener(() => {
+  void getState();
+});
+
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
   void handleMessage(message, sender)
     .then(data => sendResponse({ ok: true, data } satisfies RuntimeResponse))

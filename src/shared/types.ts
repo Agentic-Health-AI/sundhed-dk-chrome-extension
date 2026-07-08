@@ -42,11 +42,15 @@ export type SectionProgress = {
   path: string;
   count: number;
   apiResponseCount: number;
+  okResponseCount: number;
+  errorResponseCount: number;
   recordCount: number;
   recordLabel: string;
-  status: "not-started" | "opened" | "data-found" | "needs-action" | "raw-only";
+  status: "not-started" | "opened" | "empty" | "data-found" | "needs-action" | "failed" | "raw-only";
   detail: string;
   actionHint?: string;
+  coverageDetail?: string;
+  latestErrorStatus?: number;
   lastCapturedAt?: string;
 };
 

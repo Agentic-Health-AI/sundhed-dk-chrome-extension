@@ -27,9 +27,13 @@ export async function buildArchiveBlob(state: CaptureState) {
           label: section.label,
           status: section.status,
           apiResponseCount: section.apiResponseCount,
+          okResponseCount: section.okResponseCount,
+          errorResponseCount: section.errorResponseCount,
           recordCount: section.recordCount,
           recordLabel: section.recordLabel,
           detail: section.detail,
+          coverageDetail: section.coverageDetail,
+          latestErrorStatus: section.latestErrorStatus,
           actionHint: section.actionHint
         })),
         sections: exports.map(sectionExport => ({
@@ -62,6 +66,8 @@ export async function buildArchiveBlob(state: CaptureState) {
     ""
   ];
 
+  zip.file("data-kvalitet.md", buildDataQualityMarkdown(progress, state, capturedAt));
+
   for (const sectionExport of exports) {
     zip.file(`markdown/${sectionExport.id}.md`, sectionExport.markdown);
     markdownParts.push(sectionExport.markdown, "");
@@ -92,4 +98,41 @@ function groupBySection(responses: CapturedResponse[]) {
   }
 
   return grouped;
+}
+
+function buildDataQualityMarkdown(progress: ReturnType<typeof buildSectionProgress>[], state: CaptureState, capturedAt: string) {
+  const completed = progress.filter(section => section.status === "data-found" || section.status === "raw-only" || section.status === "empty");
+  const failed = progress.filter(section => section.status === "failed");
+  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened");
+  const notStarted = progress.filter(section => section.status === "not-started");
+
+  return [
+    "# Data-kvalitet",
+    "",
+    `Eksporteret: ${capturedAt}`,
+    `Opsamling startet: ${state.startedAt ?? "ukendt"}`,
+    `Tekniske svar i alt: ${state.responses.length}`,
+    "",
+    "## Overblik",
+    "",
+    `- Gennemgået med data eller 0 fund: ${completed.length}`,
+    `- Kræver et ekstra kig: ${needsAction.length}`,
+    `- Fejlede data-kald: ${failed.length}`,
+    `- Ikke gennemgået: ${notStarted.length}`,
+    "",
+    "## Sektioner",
+    "",
+    ...progress.flatMap(section => [
+      `### ${section.label}`,
+      "",
+      `- Status: ${section.status}`,
+      `- Resultat: ${section.detail}`,
+      `- Tekniske svar: ${section.apiResponseCount} (${section.okResponseCount} ok, ${section.errorResponseCount} fejl)`,
+      `- Fund: ${section.recordCount} ${section.recordLabel}`,
+      ...(section.coverageDetail ? [`- Dækning: ${section.coverageDetail}`] : []),
+      ...(section.latestErrorStatus ? [`- Seneste fejl: HTTP ${section.latestErrorStatus}`] : []),
+      ...(section.actionHint ? [`- Næste skridt: ${section.actionHint}`] : []),
+      ""
+    ])
+  ].join("\n");
 }

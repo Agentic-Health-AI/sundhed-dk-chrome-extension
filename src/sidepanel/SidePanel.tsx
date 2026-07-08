@@ -31,8 +31,18 @@ type AutoRunState = {
 type AutoRunSummary = {
   completedAt: string;
   found: number;
+  empty: number;
   needsAction: number;
   notStarted: number;
+};
+
+type CompletenessSummary = {
+  found: number;
+  empty: number;
+  needsAction: number;
+  failed: number;
+  notStarted: number;
+  total: number;
 };
 
 const emptyState: PanelState = {
@@ -47,6 +57,8 @@ const emptyState: PanelState = {
     apiResponseCount: 0,
     recordCount: 0,
     recordLabel: "API-responses",
+    okResponseCount: 0,
+    errorResponseCount: 0,
     status: "not-started",
     detail: "Ikke gennemgået endnu"
   }))
@@ -93,6 +105,7 @@ export function SidePanel() {
   const responseCount = getResponseCount(state);
   const exportReady = responseCount > 0;
   const importantSections = state.progress.filter(section => section.sectionId === "proevesvar" || section.sectionId === "journaler");
+  const completeness = useMemo(() => buildCompletenessSummary(state.progress), [state.progress]);
 
   async function refreshState(options: { showLoading?: boolean } = {}) {
     const showLoading = options.showLoading ?? true;
@@ -263,6 +276,8 @@ export function SidePanel() {
             </div>
             <div className="live-indicator" aria-hidden="true" />
           </section>
+
+          {responseCount > 0 || isCapturing || autoRunSummary ? <CompletenessStrip summary={completeness} /> : null}
 
           {error ? (
             <div className="inline-error" role="alert">
@@ -455,9 +470,27 @@ function AutoRunSummaryCard({ summary }: { summary: AutoRunSummary }) {
     <div className="completion-card" role="status">
       <strong>Data-runde færdig</strong>
       <p>
-        {summary.found} sektioner har data, {summary.needsAction} kræver et ekstra kig, og {summary.notStarted} er stadig ikke gennemgået.
+        {summary.found} sektioner har data, {summary.empty} er gennemgået uden fund, {summary.needsAction} kræver et ekstra kig,
+        og {summary.notStarted} er stadig ikke gennemgået.
       </p>
     </div>
+  );
+}
+
+function CompletenessStrip({ summary }: { summary: CompletenessSummary }) {
+  return (
+    <section className="quality-strip" aria-label="Kvalitetstjek">
+      <div>
+        <span className="eyebrow">Kvalitetstjek</span>
+        <strong>{qualitySummaryText(summary)}</strong>
+      </div>
+      <div className="quality-metrics">
+        <span data-tone="good">{summary.found} med data</span>
+        <span>{summary.empty} uden fund</span>
+        <span data-tone={summary.needsAction > 0 ? "warn" : "neutral"}>{summary.needsAction} mangler</span>
+        <span data-tone={summary.failed > 0 ? "bad" : "neutral"}>{summary.failed} fejlede</span>
+      </div>
+    </section>
   );
 }
 
@@ -491,8 +524,20 @@ function buildAutoRunSummary(progress: SectionProgress[]): AutoRunSummary {
   return {
     completedAt: new Date().toISOString(),
     found: progress.filter(section => isSectionUseful(section)).length,
-    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened").length,
+    empty: progress.filter(section => section.status === "empty").length,
+    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened" || section.status === "failed").length,
     notStarted: progress.filter(section => section.status === "not-started").length
+  };
+}
+
+function buildCompletenessSummary(progress: SectionProgress[]): CompletenessSummary {
+  return {
+    found: progress.filter(section => isSectionUseful(section)).length,
+    empty: progress.filter(section => section.status === "empty").length,
+    needsAction: progress.filter(section => section.status === "needs-action" || section.status === "opened").length,
+    failed: progress.filter(section => section.status === "failed").length,
+    notStarted: progress.filter(section => section.status === "not-started").length,
+    total: progress.length
   };
 }
 
@@ -604,6 +649,7 @@ function ProgressList({
               <strong>{statusLabel(section)}</strong>
             </div>
             <p>{section.detail}</p>
+            {section.coverageDetail ? <small>{section.coverageDetail}</small> : null}
             {section.actionHint ? <small>{section.actionHint}</small> : null}
           </div>
           <button className="icon-button" title={`Saml ${section.label}`} disabled={Boolean(busyAction)} onClick={() => onOpen(section)}>
@@ -656,15 +702,25 @@ function isSectionUseful(section: SectionProgress) {
   return section.status === "data-found" || section.status === "raw-only";
 }
 
+function isSectionComplete(section: SectionProgress) {
+  return isSectionUseful(section) || section.status === "empty";
+}
+
 function statusLabel(section: SectionProgress) {
   if (section.status === "data-found") {
     return `${section.recordCount} ${section.recordLabel}`;
   }
   if (section.status === "raw-only") {
-    return "Rå JSON";
+    return "Teknisk data";
+  }
+  if (section.status === "empty") {
+    return "0 fundet";
   }
   if (section.status === "needs-action") {
     return "Kræver handling";
+  }
+  if (section.status === "failed") {
+    return "Prøv igen";
   }
   if (section.status === "opened") {
     return "Åbnet";
@@ -673,25 +729,53 @@ function statusLabel(section: SectionProgress) {
 }
 
 function importantStatusText(sections: SectionProgress[]) {
-  const readyCount = sections.filter(section => isSectionUseful(section)).length;
-  if (readyCount === sections.length && sections.length > 0) {
-    return "Prøvesvar og journaler er med";
+  const completeCount = sections.filter(section => isSectionComplete(section)).length;
+  if (completeCount === sections.length && sections.length > 0) {
+    return "Prøvesvar og journaler er gennemgået";
   }
-  if (readyCount === 0) {
+  if (completeCount === 0) {
     return "Prøvesvar og journaler mangler";
   }
   return "Prøvesvar eller journaler mangler";
 }
 
+function qualitySummaryText(summary: CompletenessSummary) {
+  const completed = summary.found + summary.empty;
+  if (summary.failed > 0) {
+    return "Nogle sektioner fejlede og bør prøves igen.";
+  }
+  if (summary.needsAction > 0) {
+    return "Nogle sektioner kræver stadig et ekstra besøg.";
+  }
+  if (completed === summary.total && summary.total > 0) {
+    return "Alle sektioner er gennemgået.";
+  }
+  if (completed > 0) {
+    return `${completed} af ${summary.total} sektioner er gennemgået.`;
+  }
+  return "Kør alle for at gennemgå sektionerne.";
+}
+
 function importantDetailText(section: SectionProgress) {
+  if (section.coverageDetail) {
+    return section.coverageDetail;
+  }
   if (section.status === "data-found") {
     return `${section.recordCount} ${section.recordLabel} er klar til eksport.`;
   }
   if (section.status === "raw-only") {
     return "Tekniske originaldata er gemt, men kan ikke vises som regneark endnu.";
   }
+  if (section.status === "empty") {
+    return `Gennemgået uden fund. Det kan være korrekt, hvis sundhed.dk ikke viser ${section.recordLabel} her.`;
+  }
   if (section.status === "needs-action") {
     return section.actionHint ?? section.detail;
+  }
+  if (section.status === "failed") {
+    return section.latestErrorStatus
+      ? `Seneste data-kald fejlede med HTTP ${section.latestErrorStatus}. Åbn sektionen igen.`
+      : "Seneste data-kald fejlede. Åbn sektionen igen.";
   }
   if (section.status === "opened") {
     return "Siden er åbnet, men der mangler stadig data.";
@@ -702,14 +786,15 @@ function importantDetailText(section: SectionProgress) {
 function exportReadinessText(progress: SectionProgress[], responseCount: number) {
   const structured = progress.filter(section => section.status === "data-found").length;
   const rawOnly = progress.filter(section => section.status === "raw-only").length;
-  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened").length;
+  const empty = progress.filter(section => section.status === "empty").length;
+  const needsAction = progress.filter(section => section.status === "needs-action" || section.status === "opened" || section.status === "failed").length;
 
-  if (structured + rawOnly + needsAction === 0) {
+  if (structured + rawOnly + empty + needsAction === 0) {
     if (responseCount > 0) {
       return "ZIP med tekniske originaldata er klar. Gennemgå flere sektioner for læsbare dokumenter og regneark.";
     }
     return "ZIP med læsbare dokumenter, regneark og tekniske originaldata bliver klar, når du har gennemgået mindst én sektion.";
   }
 
-  return `${structured} sektioner med regneark, ${rawOnly} med tekniske originaldata og ${needsAction} der kræver mere handling.`;
+  return `${structured} sektioner med regneark, ${rawOnly} med tekniske originaldata, ${empty} gennemgået uden fund og ${needsAction} der kræver mere handling.`;
 }

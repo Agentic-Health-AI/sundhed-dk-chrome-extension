@@ -14,7 +14,7 @@ Du logger selv ind på sundhed.dk, klikker dig gennem en guidet data-runde i ext
 - Leder dig trin for trin gennem relevante sider på Min sundhedsjournal.
 - Kan køre en samlet data-runde med `Kør alle`, så sektionerne åbnes i rækkefølge.
 - Opsamler sundhed.dk API-svar fra din egen browser-session.
-- Viser løbende om der er fundet data, og hvor mange records der er fundet.
+- Viser løbende om der er fundet data, om sektioner er tomme, og om data-kald fejlede.
 - Forsøger selv at hente journaltekster fra forløbsoversigten, så du ikke manuelt skal åbne hvert notat.
 - Forsøger selv at hente prøvesvar 5 år tilbage i mindre intervaller.
 - Eksporterer et samlet ZIP-arkiv med rå data og mere læsbare filer.
@@ -65,9 +65,9 @@ Når du bygger en ny version senere, skal du tilbage til `chrome://extensions` o
 7. Klik `Kør alle`, eller åbn sektionerne én ad gangen under `Trin 2`.
 8. Vent på hver side, indtil tallet i sidepanelet opdateres.
 9. Brug `Opdater status`, hvis sidepanelet ikke har opdateret efter nogle sekunder.
-10. Klik `Download arkiv`, når du er færdig.
+10. Klik `Download ZIP`, når du er færdig.
 
-Du behøver ikke have data i alle sektioner. `0 records` kan være helt korrekt, hvis sundhed.dk ikke har noget at vise for dig i den sektion.
+Du behøver ikke have data i alle sektioner. `0 fundet` kan være helt korrekt, hvis sundhed.dk ikke har noget at vise for dig i den sektion. Brug `Kvalitetstjek` i sidepanelet til at se, hvad der er gennemgået, hvad der mangler, og om noget fejlede.
 
 ## Tips til prøvesvar
 
@@ -108,6 +108,7 @@ Indholdet er typisk:
 
 ```text
 manifest.json
+data-kvalitet.md
 sundhed-dk-eksport.md
 raw/medicin.json
 raw/proevesvar.json
@@ -123,6 +124,8 @@ csv/diagnoser.csv
 ```
 
 `manifest.json` er overblikket. Den viser hvornår eksporten blev lavet, hvilke sektioner der blev gennemgået, antal API-svar og antal records.
+
+`data-kvalitet.md` er en læsbar kvittering. Den viser pr. sektion om der var data, 0 fund, manglende handling eller fejlede data-kald, samt eventuel dato-/dækningsinformation for fx prøvesvar og journaler.
 
 `raw/` er de oprindelige JSON-svar fra sundhed.dk. Det er mest nyttigt til debugging.
 
@@ -166,9 +169,9 @@ Nogle sektioner er mere modne end andre. Når en sektion kun har rå JSON og ops
 4. Genindlæs sundhed.dk-fanen.
 5. Åbn sidepanelet igen.
 
-### En sektion viser 0 records
+### En sektion viser 0 fund
 
-Det kan være korrekt, hvis du ikke har data i sektionen. Hvis sundhed.dk tydeligt viser data på siden, men extensionen viser `0 records`, så gem et nyt `test-run` og noter hvilken sektion det gælder.
+Det kan være korrekt, hvis du ikke har data i sektionen. Hvis sundhed.dk tydeligt viser data på siden, men extensionen viser `0 fundet`, så gem et nyt `test-run` og noter hvilken sektion det gælder. Tjek også `data-kvalitet.md` i ZIP-filen for at se om sektionen blev gennemgået, fejlede eller stadig kræver handling.
 
 ### Der mangler noget i CSV
 
